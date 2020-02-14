@@ -6,9 +6,9 @@
 /*
  * Documentation for map.
  */
-PyDoc_STRVAR(map_mod_doc, "This module implements the map of 2D version 
-    of the 'Game of Life' and a generator of the map, which returns the 
-    current state and updates the state of the map when called.\nImport: 
+PyDoc_STRVAR(map_mod_doc, "This module implements the map of 2D version \
+    of the 'Game of Life' and a generator of the map, which returns the \
+    current state and updates the state of the map when called.\nImport: \
     from map import Map, MapGen");
 
 PyDoc_STRVAR(map_obj_doc, "Usage: map.Map()");
