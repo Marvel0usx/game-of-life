@@ -42,8 +42,7 @@ Map_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
     // PyType_Ready() is used as default by object
     self = (MapObject *) type->tp_alloc(type, 0);
     if (self != NULL) {
-        // TODO: allocate mem, init for List[List[int]]
-        // self->m = PyList_From...();
+        self->m    = Py_None;
         self->row  = 0;
         self->col  = 0;
         self->curr = 0;
@@ -60,21 +59,14 @@ Map_init(MapObject *self, PyObject *args, PyObject *kwds) {
     /* notice that in the previous function we have
        new-ed self hence we can use it here */
     // null-terminated array
-    static char *kwlist[] = {"map", "row", "col", "goal", NULL};
-    PyObject *m = NULL, *tmp;
+    static char *kwlist[] = {"row", "col", "goal", NULL};
 
-    // parse args to one PyObject and three int
+    // parse args to three ints, third is optional
     // doc: https://docs.python.org/3/c-api/arg.html
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "|Oiii", kwlist,
-        &m, &self->row, &self->col, &self->goal))
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "ii|i", kwlist,
+        &self->row, &self->col, &self->goal))
         return -1;
 
-    if (m) {
-        tmp = self->m;   // always reassign before DECREF
-        Py_INCREF(m);
-        self->m = m;
-        Py_XDECREF(tmp); // decrement ref count, *o can be NULL
-    }
     return 0;
 }
 
@@ -82,30 +74,88 @@ Map_init(MapObject *self, PyObject *args, PyObject *kwds) {
  * Define all map's members.
  */
 static PyMemberDef Map_members[] = {
-    {"m", T_OBJECT_EX, offsetof(MapObject, m), 0, "map of game"},
-    {"row", T_INT, offsetof(MapObject, row), 0, "number of rows"},
-    {"col", T_INT, offsetof(MapObject, col), 0, "number of columns"},
-    {"curr", T_INT, offsetof(MapObject, curr), 0, "current state of game"},
+    // private attribute
+    {"m", T_OBJECT_EX, offsetof(MapObject, m), READONLY, "map of game"},
+    {"row", T_INT, offsetof(MapObject, row), READONLY, "number of rows"},
+    {"col", T_INT, offsetof(MapObject, col), READONLY, "number of columns"},
+    {"curr", T_INT, offsetof(MapObject, curr), READONLY, "current state of game"},
     {"goal", T_INT, offsetof(MapObject, goal), 0, "goal state of the game"},
     {NULL}	/* Sentinal */
 };
 
-/*
- * Method: Map.set_map
- */
-/* TODO
-static PyObject *Map_set_map(MapObject *self, TODO add argument: 2d array) {
-    if (self->m == NULL) {
-	PyErr_SetString(PyExc_AttributeError, "m");
-	return NULL;
-    }
-    return; //TODO set m to a 2d array
+static void set_typerr(char *errmsg) {
+    PyErr_SetString(PyExc_TypeError, errmsg);
 }
-*/
 
-/*
- * Method: Map.print_map
- */
+static int Map_set_map(MapObject *self, PyObject *m, void *closure) {
+    // copy by value; DO NOT COPY BY REF
+    // use unsigned index, whereas Py_ssize_t is signed
+    PyListObject *tmp, *sublist;
+    size_t length;
+    if (m == NULL) {
+        set_typerr("Cannot delete attribute 'm'");
+        return -1;
+    } else if (!PyList_Check(m)) {
+        set_typerr("Attribute 'm' must be a list");
+        return -1;
+    } else if (self->m != Py_None) {
+        set_typerr("Attribute 'm' has already been set. To set, initialize another instance");
+        return -1;
+    } else if (self->col == 0 || self->row == 0) {
+        PyErr_SetString(PyExc_AttributeError, "Attribute 'row' or 'col' is invalid(0)");
+        return -1;
+    } else if ((length = (size_t) PyList_GET_SIZE(m)) == 0) {
+        set_typerr("Cannot use empty list");
+        return -1;
+    }
+
+    // assign before expose
+    tmp = PyList_New(length);
+    if (tmp == NULL) {
+        PyErr_SetString(PyExc_AttributeError, "Map.sm: Could not allocate for a new map");
+        return -1;
+    }
+    Py_INCREF(tmp);
+    int idx = 0;
+    for (int row = 0; row < self->row; row++) {
+        if ((sublist = PyList_New(self->col)) == NULL) {
+            for (int col = 0; col < self->col; col++) {
+                PyList_GetItem(sublist, ((Py_ssize_t) row * self->col + (Py_ssize_t) col));
+            }
+        } else {
+            // TODO: finish
+            PyErr_SetString(PyExc_AttributeError, "Map.sm: Could not allocate for a new map");
+            return -1;
+        }
+    }
+
+    for (size_t idx = 0; idx < length; idx++) {
+        sublist = PyList_GetItem(tmp, (Py_ssize_t) idx);
+        Py_INCREF(sublist);
+        for
+    }
+
+}
+
+static int Map_set_goal(MapObject *self, PyObject *value, void *closure) {
+    if (value == NULL) {
+        set_typerr("Cannot delete attribute 'goal'");
+        return -1;
+    } else if (!PyLong_Check(value)) {
+        set_typerr("Attribute 'goal' must be an integer");
+        return -1;
+    } else {
+        self->goal = (int) PyLong_AsLong(value);
+        return 0;
+    }
+}
+
+
+
+static PyObject *Map_get_map(MapObject *self, void *closure) {
+    // TODO: get a copy of the map
+}
+
 static PyObject *Map_print_map(MapObject *self, PyObject *Py_UNUSED(ignored)) {
     /* TODO: remoce dummy code
     if (self->m == NULL) {
@@ -115,31 +165,6 @@ static PyObject *Map_print_map(MapObject *self, PyObject *Py_UNUSED(ignored)) {
     */
     return PyUnicode_FromFormat("Haha!");
 }
-
-/*
- * Method: Map.set_dimesions
- */
-/* TODO
-static PyObject *Map_set_dimensions(MapObject *self, PyObject *row, PyObject *col) {
-    if (self->row == NULL) {
-	PyErr_SetString(PyExc_AttributeError, "row");
-	return NULL;
-    } else if (self->col == NULL) {
-	PyErr_SetString(PyExc_AttributeError, "col");
-	return NULL;
-    } else {
-	if ((self->row = PyLong_AsLong(row)) == -1) {
-		PyErr_SetString(PyExec_TypeError, "row");
-		return NULL;
-	}
-	if ((self->col = PyLong_AsLong(col)) == -1) {
-		PyErr_SetString(PyExec_TypeError, "col");
-		return NULL;
-	}
-    }
-    return NULL;
-}
-*/
 
 /*
  * Define all Map's methods.
