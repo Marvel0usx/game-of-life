@@ -75,7 +75,7 @@ Map_init(MapObject *self, PyObject *args, PyObject *kwds) {
  * Define all map's members.
  */
 static PyMemberDef Map_members[] = {
-    // {"m", T_OBJECT_EX, offsetof(MapObject, m), READONLY, "map of game"}, as private
+    {"m", T_OBJECT_EX, offsetof(MapObject, m), READONLY, "map of game"},
     {"row", T_INT, offsetof(MapObject, row), READONLY, "number of rows"},
     {"col", T_INT, offsetof(MapObject, col), READONLY, "number of columns"},
     {"curr", T_INT, offsetof(MapObject, curr), READONLY, "current state of game"},
@@ -167,12 +167,6 @@ static PyObject *Map_get_map(MapObject *self, void *closure) {
     }
 }
 
-static PyGetSetDef Map_getsetters[] = {
-    {"m", (getter) Map_get_map, (setter) Map_set_map, "map of game", NULL},
-    {"goal", (getter) NULL, (setter) Map_set_goal, "goal state", NULL /* closure */},
-    {NULL}  /* Sentinal */
-};
-
 static PyObject *
 Map_gen(PyObject *self, PyObject *Py_UNUSED(ignore)) {
     /* TODO: generator */
@@ -183,8 +177,14 @@ Map_gen(PyObject *self, PyObject *Py_UNUSED(ignore)) {
  * Define all Map's methods.
  */
 static PyMethodDef Map_methods[] = {
-    {"gen", (PyCFunction) Map_gen, METH_NOARGS, 
+    {"gen", (PyCFunction) Map_gen, METH_NOARGS,
      "Return the generator for this game's map"},
+    {"set_goal", (PyCFunction) Map_set_goal, METH_VARARGS,
+     "Set the goal state of the map"},
+    {"set_map", (PyCFunction) Map_set_map, METH_VARARGS,
+     "Set the map"},
+    {"get_map", (PyCFunction) Map_get_map, METH_NOARGS,
+     "Get a tuple version of the map"},
     {NULL}
 };
 
@@ -204,7 +204,6 @@ static PyTypeObject MapType = {
     .tp_dealloc = (destructor) Map_dealloc,                 /* destructor */
     .tp_members = Map_members,
     .tp_methods = Map_methods,
-    .tp_getset  = Map_getsetters,
 };
 
 /*
