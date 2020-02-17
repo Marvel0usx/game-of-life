@@ -143,6 +143,7 @@ static int Map_set_map(MapObject *self, PyObject *m, void *closure) {
             idx++;
         }
     }
+    return 0;
 }
 
 static int Map_set_goal(MapObject *self, PyObject *value, void *closure) {
