@@ -82,7 +82,7 @@ static int Map_set_map(MapObject *self, PyObject *m, void *closure) {
     /* copy by value; DO NOT COPY BY REF use 
      * unsigned index, whereas Py_ssize_t is signed 
      */
-    PyListObject *tmp, *sublist;
+    PyListObject *sublist;
     Py_ssize_t length, idx;
     	
     /* Error checking before initializing */
@@ -158,12 +158,24 @@ static PyObject *Map_get_map(MapObject *self, void *closure) {
     }
 }
 
+static PyGetSetDef Map_getsetters[] = {
+    {"m", (getter) Map_get_map, (setter) Map_set_map, "map of game", NULL},
+    {"goal", (getter) NULL, (setter) Map_set_goal, "goal state", NULL},
+    {NULL}  /* Sentinal */
+};
+
+static PyObject *
+Map_gen(PyObject *self, PyObject *Py_UNUSED(ignore)) {
+    /* TODO: generator */
+    return PyUnicode_FromString("Dummy");
+}
+
 /*
  * Define all Map's methods.
  */
 static PyMethodDef Map_methods[] = {
-    {"print_map", (PyCFunction) Map_print_map, METH_NOARGS, 
-     "Return the string representation of map"},
+    {"gen", (PyCFunction) Map_gen, METH_NOARGS, 
+     "Return the generator for this game's map"},
     {NULL}
 };
 
@@ -178,10 +190,11 @@ static PyTypeObject MapType = {
     .tp_itemsize  = 0,
     .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,   /* not subtypable */
     .tp_new = Map_new,
-    .tp_dealloc = (destructor) Map_dealloc,                 /* destructor */
     .tp_init = (initproc) Map_init,
+    .tp_dealloc = (destructor) Map_dealloc,                 /* destructor */
     .tp_members = Map_members,
     .tp_methods = Map_methods,
+    .tp_getset  = Map_getsetters,
 };
 
 /*
