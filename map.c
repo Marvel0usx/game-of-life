@@ -28,10 +28,15 @@ typedef struct {
 /* Since we have some data to manage, we at least need to have
    deallocation. */
 static void Map_dealloc(MapObject *self) {
+    PyObject *tmp;
     for (Py_ssize_t i = 0; i < self->row; i++) {
-        Py_XDECREF(PyList_GetItem(self->m, i));
+        tmp = PyList_GetItem(self->m, i);
+        PyList_SetItem(self->m, i, NULL);
+        Py_XDECREF(tmp);
     }
-    Py_XDECREF(self->m);
+    tmp = self->m;
+    self->m = NULL;
+    Py_XDECREF(tmp);
     Py_TYPE(self)->tp_free((PyObject*) self);
 }
 
@@ -70,11 +75,11 @@ Map_init(MapObject *self, PyObject *args, PyObject *kwds) {
  * Define all map's members.
  */
 static PyMemberDef Map_members[] = {
-    {"m", T_OBJECT_EX, offsetof(MapObject, m), READONLY, "map of game"},
+    // {"m", T_OBJECT_EX, offsetof(MapObject, m), READONLY, "map of game"}, as private
     {"row", T_INT, offsetof(MapObject, row), READONLY, "number of rows"},
     {"col", T_INT, offsetof(MapObject, col), READONLY, "number of columns"},
     {"curr", T_INT, offsetof(MapObject, curr), READONLY, "current state of game"},
-    {"goal", T_INT, offsetof(MapObject, goal), 0, "goal state of the game"},
+    {"goal", T_INT, offsetof(MapObject, goal), READONLY, "goal state of the game"},
     {NULL}	/* Sentinal */
 };
 
@@ -82,7 +87,6 @@ static int Map_set_map(MapObject *self, PyObject *m, void *closure) {
     /* copy by value; DO NOT COPY BY REF use 
      * unsigned index, whereas Py_ssize_t is signed 
      */
-    PyListObject *sublist;
     Py_ssize_t length, idx;
     	
     /* Error checking before initializing */
@@ -113,6 +117,7 @@ static int Map_set_map(MapObject *self, PyObject *m, void *closure) {
         return -1;
     }
 
+    idx = 0;
     /* Fill in the contents */
     for (Py_ssize_t row = 0; row < self->row; row++) {
         if (PyList_SetItem(self->m, row, PyList_New(self->col)) == -1) {  /* steal ref */
@@ -120,24 +125,27 @@ static int Map_set_map(MapObject *self, PyObject *m, void *closure) {
             return -1;
         }
         for (Py_ssize_t col = 0; col < self->col; col++) {
-            PyObject *cell = PyList_GetItem(sublist, idx);  /* borrowed ref */
+            PyObject *cell = PyList_GetItem(m, idx);  /* borrowed ref */
             if (!PyLong_Check(cell)) {
                 PyErr_SetString(PyExc_TypeError, "Contents of the list should be int");
+                Py_DECREF(cell);
                 return -1;
             } else if (PyLong_AsLong(cell) != 0 || PyLong_AsLong(cell) != 1) {
                 PyErr_SetString(PyExc_ValueError, "The value should only be 0 or 1");
+                Py_DECREF(cell);
                 return -1;
             }
             if (PyList_Append(PyList_GetItem(self->m, row), cell) == -1) {
                 PyErr_SetString(PyExc_RuntimeError, "Could not append to list");
+                Py_DECREF(cell);
                 return -1;
             }
+            idx++;
         }
     }
 }
 
 static int Map_set_goal(MapObject *self, PyObject *value, void *closure) {
-    PyObject *tmp
     if (value == NULL) {
         PyErr_SetString(PyExc_TypeError, "Cannot delete attribute 'goal'");
         return -1;
@@ -145,7 +153,7 @@ static int Map_set_goal(MapObject *self, PyObject *value, void *closure) {
         PyErr_SetString(PyExc_TypeError, "Attribute 'goal' must be an integer");
         return -1;
     } else {
-        self->goal = (int) PyLong_AsLong(value); /* does not create new ref */
+        self->goal = PyLong_AsLong(value); /* does not create new ref */
         return 0;
     }
 }
@@ -160,7 +168,7 @@ static PyObject *Map_get_map(MapObject *self, void *closure) {
 
 static PyGetSetDef Map_getsetters[] = {
     {"m", (getter) Map_get_map, (setter) Map_set_map, "map of game", NULL},
-    {"goal", (getter) NULL, (setter) Map_set_goal, "goal state", NULL},
+    {"goal", (getter) NULL, (setter) Map_set_goal, "goal state", NULL /* closure */},
     {NULL}  /* Sentinal */
 };
 
@@ -188,7 +196,8 @@ static PyTypeObject MapType = {
     .tp_doc  = map_obj_doc,
     .tp_basicsize = sizeof(MapObject),
     .tp_itemsize  = 0,
-    .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,   /* not subtypable */
+    .tp_flags = Py_TPFLAGS_DEFAULT,                         /* not subtypable */
+    .tp_alloc = PyType_GenericAlloc,
     .tp_new = Map_new,
     .tp_init = (initproc) Map_init,
     .tp_dealloc = (destructor) Map_dealloc,                 /* destructor */
