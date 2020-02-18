@@ -60,12 +60,10 @@ static int
 Map_init(MapObject *self, PyObject *args, PyObject *kwds) {
     /* notice that in the previous function we have
        new-ed self hence we can use it here */
-    static char *kwlist[] = {"row", "col", "goal", NULL}; /* null-terminated */
-
     /* parse args to three ints, third is optional
        doc: https://docs.python.org/3/c-api/arg.html */
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "ii|i", kwlist,
-        &self->row, &self->col, &self->goal))
+    if (!PyArg_ParseTuple(args, "ll|l" /* only for ParseTuple*/,
+	&self->row, &self->col, &self->goal))
         return -1;
 
     return 0;
@@ -75,20 +73,19 @@ Map_init(MapObject *self, PyObject *args, PyObject *kwds) {
  * Define all map's members.
  */
 static PyMemberDef Map_members[] = {
-    {"m", T_OBJECT_EX, offsetof(MapObject, m), READONLY, "map of game"},
     {"row", T_INT, offsetof(MapObject, row), READONLY, "number of rows"},
     {"col", T_INT, offsetof(MapObject, col), READONLY, "number of columns"},
     {"curr", T_INT, offsetof(MapObject, curr), READONLY, "current state of game"},
-    {"goal", T_INT, offsetof(MapObject, goal), READONLY, "goal state of the game"},
+    {"goal", T_INT, offsetof(MapObject, goal), 0, "goal state of the game"},
     {NULL}	/* Sentinal */
 };
 
 static int Map_set_map(MapObject *self, PyObject *m, void *closure) {
-    /* copy by value; DO NOT COPY BY REF use 
-     * unsigned index, whereas Py_ssize_t is signed 
+    /* copy by value; DO NOT COPY BY REF use
+     * unsigned index, whereas Py_ssize_t is signed
      */
     Py_ssize_t length, idx;
-    	
+
     /* Error checking before initializing */
     if (m == NULL) {
         PyErr_SetString(PyExc_TypeError, "Cannot delete attribute 'm'");
@@ -146,19 +143,6 @@ static int Map_set_map(MapObject *self, PyObject *m, void *closure) {
     return 0;
 }
 
-static int Map_set_goal(MapObject *self, PyObject *value, void *closure) {
-    if (value == NULL) {
-        PyErr_SetString(PyExc_TypeError, "Cannot delete attribute 'goal'");
-        return -1;
-    } else if (!PyLong_Check(value)) {
-        PyErr_SetString(PyExc_TypeError, "Attribute 'goal' must be an integer");
-        return -1;
-    } else {
-        self->goal = PyLong_AsLong(value); /* does not create new ref */
-        return 0;
-    }
-}
-
 static PyObject *Map_get_map(MapObject *self, void *closure) {
     if (self->m != Py_None) {
         return PyList_AsTuple(self->m);
@@ -179,8 +163,6 @@ Map_gen(PyObject *self, PyObject *Py_UNUSED(ignore)) {
 static PyMethodDef Map_methods[] = {
     {"gen", (PyCFunction) Map_gen, METH_NOARGS,
      "Return the generator for this game's map"},
-    {"set_goal", (PyCFunction) Map_set_goal, METH_VARARGS,
-     "Set the goal state of the map"},
     {"set_map", (PyCFunction) Map_set_map, METH_VARARGS,
      "Set the map"},
     {"get_map", (PyCFunction) Map_get_map, METH_NOARGS,
