@@ -47,7 +47,11 @@ Map_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
        PyType_Ready() is used as default by object */
     self = (MapObject *) type->tp_alloc(type, 0);
     if (self != NULL) {
-        self->m    = Py_None;
+	self->m = PyList_New(0);
+	if (self->m == NULL) {
+	    Py_DECREF(self);
+	    return NULL;
+	}
         self->row  = 0;
         self->col  = 0;
         self->curr = 0;
@@ -65,7 +69,6 @@ Map_init(MapObject *self, PyObject *args, PyObject *kwds) {
     if (!PyArg_ParseTuple(args, "ll|l" /* only for ParseTuple*/,
 	&self->row, &self->col, &self->goal))
         return -1;
-
     return 0;
 }
 
@@ -84,16 +87,16 @@ static int Map_set_map(MapObject *self, PyObject *m, void *closure) {
     /* copy by value; DO NOT COPY BY REF use
      * unsigned index, whereas Py_ssize_t is signed
      */
-    Py_ssize_t length, idx;
+//    Py_ssize_t length, idx;
 
-    /* Error checking before initializing */
+    /* Error checking before initializing
     if (m == NULL) {
         PyErr_SetString(PyExc_TypeError, "Cannot delete attribute 'm'");
         return -1;
     } else if (!PyList_Check(m)) {
         PyErr_SetString(PyExc_TypeError, "Argument 'm' must be a list");
         return -1;
-    } else if (self->m != Py_None) {
+    } else if (PyList_Size(self->m) != 0) {
         PyErr_SetString(PyExc_TypeError, "Attribute 'm' has already been set. To set, initialize another instance");
         return -1;
     } else if (self->col == 0 || self->row == 0) {
@@ -105,24 +108,41 @@ static int Map_set_map(MapObject *self, PyObject *m, void *closure) {
     } else if (self->row * self->col < length) {
         PyErr_SetString(PyExc_IndexError, "Number of elements in 'm' excesses bound");
         return -1;
-    }
+    }*/
 
     /* Initiaze Map.m to a list */
-    self->m = PyList_New((Py_ssize_t) self->row);
+    
+    self->m = (PyObject *) PyMem_New(PyListObject, self->row);
+    if (self->m == NULL) {
+	PyErr_SetString(PyExc_MemoryError, "self->map");
+    	return -1;
+    }
+    for (Py_ssize_t row = 0; row < self->row; row++) {
+	if (PyList_SetItem(self->m, row, PyList_New(self->col)) != -1) {
+	    PyErr_SetString(PyExc_RuntimeError, "Could not set item in attribute 'm'");
+	    return -1;
+        }
+    	for (Py_ssize_t col = 0; col < self->col; col++) {
+	    PyList_SetItem(PyList_GetItem(self->m, row), col, PyLong_FromLong(666));
+	}
+    }
+    return 0;
+    /*
+    PyList_New((Py_ssize_t) self->row);
     if (!self->m) {
         PyErr_SetString(PyExc_MemoryError, "Could not allocate for Map.m");
         return -1;
     }
 
     idx = 0;
-    /* Fill in the contents */
+    //Fill in the contents
     for (Py_ssize_t row = 0; row < self->row; row++) {
-        if (PyList_SetItem(self->m, row, PyList_New(self->col)) == -1) {  /* steal ref */
+        if (PyList_SetItem(self->m, row, PyList_New(self->col)) == -1) {  //steal ref 
             PyErr_SetString(PyExc_RuntimeError, "Could not append to attribute 'm'");
             return -1;
         }
         for (Py_ssize_t col = 0; col < self->col; col++) {
-            PyObject *cell = PyList_GetItem(m, idx);  /* borrowed ref */
+            PyObject *cell = PyList_GetItem(m, idx);  // borrowed ref
             if (!PyLong_Check(cell)) {
                 PyErr_SetString(PyExc_TypeError, "Contents of the list should be int");
                 Py_DECREF(cell);
@@ -139,7 +159,7 @@ static int Map_set_map(MapObject *self, PyObject *m, void *closure) {
             }
             idx++;
         }
-    }
+    }*/
     return 0;
 }
 
