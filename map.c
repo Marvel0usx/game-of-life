@@ -79,57 +79,60 @@ static PyMemberDef Map_members[] = {
     {NULL}	/* Sentinal */
 };
 
-static int Map_set_map(MapObject *self, PyObject *m, void *closure) {
+static PyObject *Map_set_map(MapObject *self, PyObject *m, void *closure) {
+	Py_XINCREF(m);
     /* copy by value; DO NOT COPY BY REF use
      * unsigned index, whereas Py_ssize_t is signed
      */
-    Py_ssize_t length;
-	PyObject *_m;
-    /* Error checking before initializing */
-    if (m == NULL) {
-        PyErr_SetString(PyExc_TypeError, "Cannot delete attribute 'm'");
-        return -1;
-    } else if (!PyList_Check(_m = PyTuple_GetItem(m, 0))) {
-        PyErr_SetString(PyExc_TypeError, "Argument 'm' must be a list");
-        return -1;
-    } else if (self->m != NULL) {
-        PyErr_SetString(PyExc_TypeError, "Attribute 'm' has already been set. To set, initialize another instance");
-        return -1;
+    Py_ssize_t length, idx = 0;
+	PyObject * cell, *tmp, *pMap = NULL;		/* no new ref */
+    /* error checking */
+	if (!PyArg_ParseTuple(m, "O!:", &PyList_Type, &pMap /* here pMap receives the actual obj passed, no new reference */)) {
+		PyErr_SetString(PyExc_TypeError, "Parameter must be a list.");
+		goto error;
+    } else if (self->m != Py_None) {
+        PyErr_SetString(PyExc_TypeError, "Map has already been set. To set, initialize another instance.");
+        goto error;
     } else if (self->col == 0 || self->row == 0) {
-        PyErr_SetString(PyExc_AttributeError, "Attribute 'row' or 'col' is invalid(0)");
-        return -1;
-    } else if ((length = PyList_Size(_m)) == 0) {
-        PyErr_SetString(PyExc_ValueError, "Cannot use empty list to initialize attribute 'm'");
-        return -1;
+        PyErr_SetString(PyExc_AttributeError, "Attribute 'row' or 'col' is invalid(0).");
+        goto error;
+    } else if ((length = PyList_Size(pMap)) == 0) {
+        PyErr_SetString(PyExc_ValueError, "Cannot use empty list to initialize map.");
+        goto error;
     } else if (self->row * self->col < length) {
-        PyErr_SetString(PyExc_IndexError, "Number of elements in 'm' excesses bound");
-        return -1;
+        PyErr_SetString(PyExc_IndexError, "Too many elements in argument.");
+		goto error;
     }
-    /* Allocate memory for map */
+    /* initialize map*/
     self->m = PyList_New(self->row);
-    /* Fill in contents */
-    Py_ssize_t idx = 0;
-	PyObject *cell, *tmp;
-	//TODO: work on memory dealloc
     for (Py_ssize_t row = 0; row < self->row; row++) {
         tmp = (PyObject *) PyList_New(self->col);
         for (Py_ssize_t col = 0; col < self->col; col++, idx++) {
-            if (!PyLong_Check((cell = PyList_GetItem(_m, idx)) /* borrowed ref */)) {
-                PyErr_SetString(PyExc_TypeError, "Content of argument must be binary");
-                return -1;
+            if (!PyLong_Check((cell = PyList_GetItem(pMap, idx)) /* borrowed ref */)) {
+                PyErr_SetString(PyExc_TypeError, "List elements must be integer valued.");
+                goto error2;
             } else if (PyLong_AsLong(cell) != 0 && PyLong_AsLong(cell) != 1) {
-                PyErr_SetString(PyExc_TypeError, "Content of argument must be binary");
-                return -1;
+                PyErr_SetString(PyExc_TypeError, "List elements must be either 0 or 1.");
+                goto error2;
             } else {
-                PyList_SetItem(tmp, col, cell);		/* steal reference */
+                PyList_SetItem(tmp, col, cell);		/* steal reference of tmp */
             }
         }
         PyList_SetItem(self->m, row, tmp);
 		/* no need to DECREF(tmp) since it causes self->m[i] to be garbage-collected */
     }
-	Py_DECREF(_m);
-    return 0;
-}
+	Py_DECREF(m);
+	Py_RETURN_NONE;
+
+error:
+	Py_XDECREF(m);
+	return NULL;
+
+error2:
+	Py_XDECREF(m);
+	Py_XDECREF(tmp);
+	return NULL;
+}  
 
 static PyObject *Map_get_map(MapObject *self, void *closure) {
     if (self->m != Py_None) {
