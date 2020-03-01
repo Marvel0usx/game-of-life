@@ -28,15 +28,7 @@ typedef struct {
 /* Since we have some data to manage, we at least need to have
    deallocation. */
 static void Map_dealloc(MapObject *self) {
-    PyObject *tmp;
-    for (Py_ssize_t i = 0; i < self->row; i++) {
-        tmp = PyList_GetItem(self->m, i);
-        PyList_SetItem(self->m, i, NULL);
-        Py_XDECREF(tmp);
-    }
-    tmp = self->m;
-    self->m = NULL;
-    Py_XDECREF(tmp);
+	Py_XDECREF(self->m);
     Py_TYPE(self)->tp_free((PyObject*) self);
 }
 
@@ -52,7 +44,7 @@ Map_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
         self->col  = 0;
         self->curr = 0;
         self->goal = 0;
-    }
+    } 
     return (PyObject *) self;
 }
 
@@ -99,8 +91,8 @@ static PyObject *Map_set_map(MapObject *self, PyObject *m, void *closure) {
     } else if ((length = PyList_Size(pMap)) == 0) {
         PyErr_SetString(PyExc_ValueError, "Cannot use empty list to initialize map.");
         goto error;
-    } else if (self->row * self->col < length) {
-        PyErr_SetString(PyExc_IndexError, "Too many elements in argument.");
+    } else if (self->row * self->col != length) {
+        PyErr_SetString(PyExc_IndexError, "Too many or too few elements.");
 		goto error;
     }
     /* initialize map*/
@@ -129,6 +121,7 @@ error:
 	return NULL;
 
 error2:
+	self->m = Py_None;
 	Py_XDECREF(m);
 	Py_XDECREF(tmp);
 	return NULL;
@@ -142,8 +135,7 @@ static PyObject *Map_get_map(MapObject *self, void *closure) {
     }
 }
 
-static PyObject *
-Map_gen(PyObject *self, PyObject *Py_UNUSED(ignore)) {
+static PyObject *Map_gen(PyObject *self, PyObject *Py_UNUSED(ignore)) {
     /* TODO: generator */
     return PyUnicode_FromString("Dummy");
 }
