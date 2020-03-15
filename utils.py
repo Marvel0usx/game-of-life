@@ -56,10 +56,31 @@ class MapItor:
             self._curr += 1
             return updated(self._map, self._row, self._col)
 
+class testItor:
+    def __init__(self, num):
+        self.limit = num
+        self.curr = 0
+
+    def __iter__(self):
+        return self
+    
+    def __next__(self):
+        tmp = self.curr
+        if self.curr < self.limit:
+            self.curr += 1
+        else:
+            raise StopIteration
+        return tmp
+
 if __name__ == "__main__":
-    my_map = Map()
-    my_map.set_col(0)
-    my_map.set_row(1)
-    my_map.init_map([1,2])
-    for i in my_map.get_iter(10):
-        print(i, end='\n')
+    # my_map = Map()
+    # my_map.set_col(0)
+    # my_map.set_row(1)
+    # my_map.init_map([1,2])
+    # for i in my_map.get_iter(100):
+    #     print(i, end='\n')
+    t = testItor(100)
+    for i in t:
+        print(i)
+    print(t.__next__()
+    )

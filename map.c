@@ -136,7 +136,12 @@ static PyObject *Map_get_map(MapObject *self, void *closure) {
 }
 
 static PyObject *Map_gen(PyObject *self, PyObject *Py_UNUSED(ignore)) {
-    /* TODO: generator */
+    /* TODO: generator for map: 
+    if there is a goal specified, the generator exhausts at the given state.
+    if the goal is number 0, then the generator shoul not deplete
+    
+    rule of the 2D game of live is specified in life2d.c
+     */
     return PyUnicode_FromString("Dummy");
 }
 
