@@ -60,7 +60,7 @@ class GameOfLifeVisualizer():
         file_menu.add_command(label="Close Current", command=self.dummy)
         menubar.add_cascade(label="File", menu=file_menu)
         menubar.add_command(label="About", command=lambda: system(
-            "start www.github.com/Marvel0udx/gameoflife"))
+            "start www.github.com/Marvel0udx/game-of-life"))
         self._root.config(menu=menubar)
 
     def __build_main_window(self) -> None:
