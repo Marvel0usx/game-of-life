@@ -2,6 +2,7 @@
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
 #include <structmember.h>
+#include "life_helpers.h"
 
 /*
  * Documentation for map.
@@ -203,7 +204,33 @@ static PyMemberDef MapIter_members[] = {
 };
 
 /* TODO: __iter__ and __next__*/
+// set tp_iternext to this function
+// Python interpreter checks on whether the tp_iter is provided
+// if no tp_iter is provided, it checks whether the type is sequence
+// in this case, the MapIter is not of a sequence type. Therefore,
+// fail to provide tp_iter cause "object is not iterable" exception.
+// tp_iter should return another object that passes PyIter_Check.
+// No new reference created.
+PyObject *MapIter_GetIter(PyObject *self) {
+	return self;
+}
 
+// set tp_iternext to this function
+// tp_iternext should take an iterator, which would be the iterable
+// returned by tp_iter. Return of this function creates new reference.
+// Return NULL with no exception set when finished
+PyObject *MapIter_GetNext(MapIterObject *self) {
+	if (self->curr < self->goal) {
+        update_map(self->map, self->m->rows, self->m->cols);
+        return self;
+    } else {
+        return NULL;
+    }
+}
+
+PyObject *MapIter_GetMap(MapIterObject *self) {
+    
+}
 
 static PyMethodDef MapIter_methods[] = {
 	{NULL}
@@ -215,13 +242,16 @@ static PyTypeObject MapIterType = {
 	.tp_doc = map_obj_doc,
 	.tp_basicsize = sizeof(MapIterObject),
 	.tp_itemsize = 0,
-	.tp_flags = Py_TPFLAGS_DEFAULT,                         /* not subtypable */
+	.tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_ITER,    /* Py_TPFLAGS_HAVE_ITER is set for iterator features */
 	.tp_alloc = PyType_GenericAlloc,
 	.tp_new = MapIter_new,
 	.tp_init = (initproc)MapIter_init,
 	.tp_dealloc = (destructor)MapIter_dealloc,                 /* destructor */
 	.tp_members = MapIter_members,
 	.tp_methods = MapIter_methods,
+    // TODO: comment out after implemented
+    // .tp_iter = ,
+    // .tp_iternext = ,
 };
 
 
