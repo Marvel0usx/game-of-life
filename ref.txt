@@ -1,6 +1,0 @@
-https://docs.python.org/3/extending/newtypes_tutorial.html
-https://docs.python.org/3/c-api/arg.html
-https://docs.python.org/3/c-api/refcounting.html#c.Py_DECREF
-https://github.com/python/cpython/blob/master/Lib/queue.py
-https://stackoverflow.com/questions/28295674/define-python-class-from-c
-https://stackoverflow.com/questions/1815812/how-to-create-a-generator-iterator-with-the-python-c-api
