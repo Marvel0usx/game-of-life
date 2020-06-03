@@ -1,8 +1,13 @@
-#include <stdio.h>
 #include <stdlib.h>
-#include "life_helpers.h"
 
-static int num_neighbor(int **map, int r, int c);
+static int num_neighbor(int *map, int c,  int i) {
+	int count = 0;
+	int idxs[] = { i - c - 1, i - c, i - c + 1, i - 1, i + 1, i + c - 1, i + c, i + c + 1 };
+	for (int *p = idxs; p < (idxs + 8); p++) {
+		count += map[*p];
+	}
+	return count;
+}
 
 /*
  * Update map according to the following rules:
@@ -12,43 +17,26 @@ static int num_neighbor(int **map, int r, int c);
  *	- Any dead cell with exactly three live neighbours becomes a live cell, as if by reproduction.
  *  - Any cell at the border does not change.
  */
-void update_map(int **map, int nrows, int ncols) {
-	int n_n;
-	/* Update is based on old map solely */
-	int **ol_m = malloc(sizeof(int **));
-	for (int row = 0; row < nrows; row++) {
-		ol_m[row] = malloc(sizeof(int *));
-		for (int col = 0; col < ncols; )
-			ol_m[row][col++] = map[row][col];
+void update_map(int *map, int nrow, int ncol) {
+	int *ol_m = malloc(sizeof(int) * nrow * ncol);
+	for (int idx = 0; idx < nrow * ncol; ) {
+		ol_m[idx++] = map[idx];
 	}
 
-	for (int row = 0; row < nrows; row++) {
-		for (int col = 0; col < ncols; col++) {
-			if (row == 0 || row == nrows - 1)
-				continue;
-			if (col == 0 || col == ncols - 1)
-				continue;
-			n_n = num_neighbor(map, row, col);
-			if (ol_m[row][col] && (n_n < 2 || n_n > 3)) {
-				map[row][col] = 0;
-			} else if (!ol_m[row][col] && n_n == 3) {
-				map[row][col] = 1;
-			}
+	for (int i = 0; i < ncol * nrow; i++) {
+		// cells that are at borders
+		if (0 <= i && i <= ncol - 1) continue;
+		if (i % ncol == 0 || i % ncol == ncol - 1) continue;
+		if ((nrow + ncol) * ncol <= i && i <= nrow * ncol - 1) continue;
+		// cells that are guaranteed to have neighbor
+		int n_neighbor = num_neighbor(ol_m, ncol, i);
+		if (ol_m[i] && (n_neighbor < 2 || n_neighbor > 3)) {
+			map[i] = 0;
 		}
-	}
-
-	for (int row = 0; row < nrows; row++) {
-		free(ol_m[row]);
+		if (!ol_m[i] && (n_neighbor == 3)) {
+			map[i] = 1;
+		}
 	}
 	free(ol_m);
-}
-
-static int num_neighbor(int **map, int r, int c) {
-	int count = 0;
-	for (int **row = map + r - 1; row - map < r + 1; row++) {
-		for (int *col = *row + c - 1; col - row < c + 1; col++) {
-			count += *col;
-		}
-	}
-	return count;
+	return 0;
 }

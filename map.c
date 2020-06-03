@@ -4,6 +4,21 @@
 #include <structmember.h>
 #include "life_helpers.h"
 
+static PyObject *list_to_PyList(int *map, int nrow, int ncol) {
+	PyObject *res = PyList_New((Py_ssize_t)nrow * ncol);
+	Py_INCREF(res);
+	PyObject *row = NULL;
+	for (int idx = 0; idx < nrow * ncol; idx++) {
+		if (idx % ncol == 0) {
+			row = PyList_New((Py_ssize_t)ncol);
+			Py_INCREF(row);
+			PyList_Append(res, row);
+		}
+		PyList_Append(row, PyLong_FromLong(map[idx]));
+	}
+	return res;
+}
+
 /*
  * Documentation for map.
  */
@@ -19,15 +34,15 @@ PyDoc_STRVAR(map_obj_doc, "Usage: map.Map(row: int, col: int)");
  */
 typedef struct {
     PyObject_HEAD
-    PyObject *m;
-    int row;
-    int col;
+    int *m;
+    int nrow;
+    int ncol;
 } MapObject;
 
 /* Since we have some data to manage, we at least need to have
    deallocation. */
 static void Map_dealloc(MapObject *self) {
-	Py_XDECREF(self->m);
+    free(self->m);
     Py_TYPE(self)->tp_free((PyObject*) self);
 }
 
@@ -37,9 +52,9 @@ static PyObject *Map_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
        PyType_Ready() is used as default by object */
     self = (MapObject *) type->tp_alloc(type, 0);
     if (self != NULL) {
-	    self->m = Py_None;
-        self->row  = 0;
-        self->col  = 0;
+	    self->m = NULL;
+        self->nrow  = 0;
+        self->ncol  = 0;
     } 
     return (PyObject *) self;
 }
@@ -50,7 +65,7 @@ static int Map_init(MapObject *self, PyObject *args, PyObject *kwds) {
     /* parse args to three ints, third is optional
        doc: https://docs.python.org/3/c-api/arg.html */
     if (!PyArg_ParseTuple(args, "ll" /* only for ParseTuple*/,
-	    &self->row, &self->col))
+	    &self->nrow, &self->ncol))
         return -1;
     return 0;
 }
@@ -59,52 +74,48 @@ static int Map_init(MapObject *self, PyObject *args, PyObject *kwds) {
  * Define all map's members.
  */
 static PyMemberDef Map_members[] = {
-    {"row", T_INT, offsetof(MapObject, row), READONLY, "number of rows"},
-    {"col", T_INT, offsetof(MapObject, col), READONLY, "number of columns"},
+    {"nrow", T_INT, offsetof(MapObject, nrow), READONLY, "number of rows"},
+    {"ncol", T_INT, offsetof(MapObject, ncol), READONLY, "number of columns"},
     {NULL}	/* Sentinal */
 };
 
 static PyObject *Map_set_map(MapObject *self, PyObject *m, void *closure) {
+    /* prevent from being garbage collected during this process. */
 	Py_XINCREF(m);
     /* copy by value; DO NOT COPY BY REF use
      * unsigned index, whereas Py_ssize_t is signed
      */
     Py_ssize_t length = 0, idx = 0;
-	PyObject * cell, *tmp, *pMap;		/* no new ref */
+	PyObject *cell, *pMap;		/* no new ref */
     /* error checking */
 	if (!PyArg_ParseTuple(m, "O!:", &PyList_Type, &pMap /* here pMap receives the actual obj passed, no new reference */)) {
 		PyErr_SetString(PyExc_TypeError, "Parameter must be a list.");
 		goto error;
-    } else if (self->m != Py_None) {
+    } else if (self->m != NULL) {
         PyErr_SetString(PyExc_TypeError, "Map has already been set. To set, initialize another instance.");
         goto error;
-    } else if (self->col == 0 || self->row == 0) {
+    } else if (self->ncol == 0 || self->nrow == 0) {
         PyErr_SetString(PyExc_AttributeError, "Attribute 'row' or 'col' is invalid(0).");
         goto error;
     } else if ((length = PyList_Size(pMap)) == 0) {
         PyErr_SetString(PyExc_ValueError, "Cannot use empty list to initialize map.");
         goto error;
-    } else if (self->row * self->col != length) {
+    } else if (self->nrow * self->ncol != length) {
         PyErr_SetString(PyExc_IndexError, "Too many or too few elements.");
 		goto error;
     }
     /* initialize map*/
-    self->m = PyList_New(self->row);
-    for (Py_ssize_t row = 0; row < self->row; row++) {
-        tmp = (PyObject *) PyList_New(self->col);
-        for (Py_ssize_t col = 0; col < self->col; col++, idx++) {
-            if (!PyLong_Check((cell = PyList_GetItem(pMap, idx)) /* borrowed ref */)) {
-                PyErr_SetString(PyExc_TypeError, "List elements must be integer valued.");
-                goto error2;
-            } else if (PyLong_AsLong(cell) != 0 && PyLong_AsLong(cell) != 1) {
-                PyErr_SetString(PyExc_TypeError, "List elements must be either 0 or 1.");
-                goto error2;
-            } else {
-                PyList_SetItem(tmp, col, cell);		/* steal reference of tmp */
-            }
+    self->m = malloc(sizeof(int) * self->ncol * self->nrow);
+    for (int idx = 0; idx < self->ncol * self->nrow; idx++) {
+        if (!PyLong_Check((cell = PyList_GetItem(pMap, idx)) /* borrowed ref */)) {
+            PyErr_SetString(PyExc_TypeError, "List elements must be integer valued.");
+            goto error2;
+        } else if (PyLong_AsLong(cell) != 0 && PyLong_AsLong(cell) != 1) {
+            PyErr_SetString(PyExc_TypeError, "List elements must be either 0 or 1.");
+            goto error2;
+        } else {
+            self->m[idx] = PyLong_AsLong(cell);
         }
-        PyList_SetItem(self->m, row, tmp);
-		/* no need to DECREF(tmp) since it causes self->m[i] to be garbage-collected */
     }
 	Py_DECREF(m);
 	Py_RETURN_NONE;
@@ -114,15 +125,14 @@ error:
 	return NULL;
 
 error2:
-	self->m = Py_None;
+	self->m = NULL;
 	Py_XDECREF(m);
-	Py_XDECREF(tmp);
 	return NULL;
 }  
 
 static PyObject *Map_get_map(MapObject *self, void *closure) {
-    if (self->m != Py_None) {
-        return PyList_AsTuple(self->m);
+    if (self->m != NULL) {
+        return list_to_PyList(self->m, self->nrow, self->ncol);
     } else {
         return Py_None;
     }
@@ -165,16 +175,15 @@ static PyTypeObject MapType = {
 /* Map Iterator Class */
 typedef struct {
 	PyObject_HEAD
-	MapObject *m;
-	int **buf;
+	MapObject *mobj;
+	int *buf;
 	int curr;
 	int goal;
 } MapIterObject;
 
 static void MapIter_dealloc(MapIterObject *self) {
-	for (int **tmp = self->buf; tmp - self->buf < self->m->row; tmp++) {
-		free(*tmp);
-	}
+	free(self->buf);
+    Py_XDECREF(self->mobj);
 	Py_TYPE(self)->tp_free((PyObject*)self);
 }
 
@@ -185,51 +194,50 @@ static PyObject *MapIter_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 		self->curr = 0;
 		self->goal = 0;
 		self->buf = NULL;
-		self->m = malloc(sizeof(MapObject *));
+		self->mobj = NULL;
 	}
 	return (PyObject *)self;
 }
 
 static int MapIter_init(MapIterObject *self, PyObject *args, PyObject *kwds) {
 	if (!PyArg_ParseTuple(args, "Ol" /* only for ParseTuple*/,
-		&self->m, &self->goal))
+		&self->mobj, &self->goal))
 		return -1;
+    Py_ssize_t len = (Py_ssize_t) self->mobj->ncol * self->mobj->nrow;
+    self->buf = malloc(sizeof(int) * len);
+    for (int *p = self->mobj->m, *q = self->buf; p - self->mobj->m < len; *q++ = *p++);
 	return 0;
 }
 
 static PyMemberDef MapIter_members[] = {
 	{"curr", T_INT, offsetof(MapIterObject, curr), READONLY, "current state"},
-	{"goal", T_INT, offsetof(MapIterObject, goal), 0, "goal state"},
+	{"goal", T_INT, offsetof(MapIterObject, goal), READONLY, "goal state"},
 	{NULL}	/* Sentinal */
 };
 
-/* TODO: __iter__ and __next__*/
-// set tp_iternext to this function
+// Set tp_iternext to this function
 // Python interpreter checks on whether the tp_iter is provided
 // if no tp_iter is provided, it checks whether the type is sequence
 // in this case, the MapIter is not of a sequence type. Therefore,
 // fail to provide tp_iter cause "object is not iterable" exception.
 // tp_iter should return another object that passes PyIter_Check.
 // No new reference created.
-PyObject *MapIter_GetIter(PyObject *self) {
-	return self;
+PyObject *MapIter_GetIter(MapIterObject *self) {
+    self->curr = 0;
+	return (PyObject *) self;
 }
 
-// set tp_iternext to this function
+// Set tp_iternext to this function
 // tp_iternext should take an iterator, which would be the iterable
 // returned by tp_iter. Return of this function creates new reference.
 // Return NULL with no exception set when finished
 PyObject *MapIter_GetNext(MapIterObject *self) {
 	if (self->curr < self->goal) {
-        update_map(self->map, self->m->rows, self->m->cols);
-        return self;
+        update_map(self->buf, self->mobj->nrow, self->mobj->ncol);
+        return list_to_PyList(self->buf, self->mobj->nrow, self->mobj->ncol);
     } else {
         return NULL;
     }
-}
-
-PyObject *MapIter_GetMap(MapIterObject *self) {
-    
 }
 
 static PyMethodDef MapIter_methods[] = {
@@ -242,6 +250,9 @@ static PyTypeObject MapIterType = {
 	.tp_doc = map_obj_doc,
 	.tp_basicsize = sizeof(MapIterObject),
 	.tp_itemsize = 0,
+	#if PY_MAJOR_VERSION >=3
+	#  define Py_TPFLAGS_HAVE_ITER 0
+	#endif
 	.tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_ITER,    /* Py_TPFLAGS_HAVE_ITER is set for iterator features */
 	.tp_alloc = PyType_GenericAlloc,
 	.tp_new = MapIter_new,
@@ -249,9 +260,8 @@ static PyTypeObject MapIterType = {
 	.tp_dealloc = (destructor)MapIter_dealloc,                 /* destructor */
 	.tp_members = MapIter_members,
 	.tp_methods = MapIter_methods,
-    // TODO: comment out after implemented
-    // .tp_iter = ,
-    // .tp_iternext = ,
+    .tp_iter = (getiterfunc) MapIter_GetIter,
+    .tp_iternext = (iternextfunc) MapIter_GetNext,
 };
 
 
