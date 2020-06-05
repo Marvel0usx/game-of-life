@@ -15,15 +15,15 @@ static PyTypeObject MapIterType;
 /*
  * Helper function.
  */
-static PyObject *list_to_PyList(int *map, int nrow, int ncol) {
-	PyObject *res = PyList_New((Py_ssize_t) nrow * ncol);
+static PyObject *list_to_PyTuple(int *map, int nrow, int ncol) {
+	PyObject *res = PyTuple_New((Py_ssize_t) nrow);
 	PyObject *row = NULL;
 	for (int idx = 0; idx < nrow * ncol; idx++) {
 		if (idx % ncol == 0) {
-			row = PyList_New((Py_ssize_t) ncol);
-			PyList_Append(res, row);
+			row = PyTuple_New((Py_ssize_t) ncol);
+			PyTuple_SetItem(res, idx / ncol, row);
 		}
-		PyList_Append(row, PyLong_FromLong(map[idx]));
+		PyTuple_SetItem(row, idx % ncol, PyLong_FromLong(map[idx]));
 	}
 	return res;
 }
@@ -100,16 +100,16 @@ static PyMemberDef Map_Members[] = {
     {NULL}	/* Sentinal */
 };
 
-static PyObject *Map_SetMap(MapObject *self, PyObject *m, void *closure) {
+static PyObject *Map_SetMap(MapObject *self, PyObject *args, void *closure) {
     /* prevent from being garbage collected during this process. */
-	Py_XINCREF(m);
+	Py_XINCREF(args);
     /* copy by value; DO NOT COPY BY REF use
      * unsigned index, whereas Py_ssize_t is signed
      */
     Py_ssize_t length = 0, idx = 0;
 	PyObject *cell, *pMap;		/* no new ref */
     /* error checking */
-	if (!PyArg_ParseTuple(m, "O!:", &PyList_Type, &pMap /* here pMap receives the actual obj passed, no new reference */)) {
+	if (!PyArg_ParseTuple(args, "O!:", &PyList_Type, &pMap /* here pMap receives the actual obj passed, no new reference */)) {
 		PyErr_SetString(PyExc_TypeError, "Parameter must be a list.");
 		goto error;
     } else if (self->m != NULL) {
@@ -138,22 +138,22 @@ static PyObject *Map_SetMap(MapObject *self, PyObject *m, void *closure) {
             self->m[idx] = PyLong_AsLong(cell);
         }
     }
-	Py_DECREF(m);
+	Py_DECREF(args);
 	Py_RETURN_NONE;
 
 error:
-	Py_XDECREF(m);
+	Py_XDECREF(args);
 	return NULL;
 
 error2:
 	self->m = NULL;
-	Py_XDECREF(m);
+	Py_XDECREF(args);
 	return NULL;
 }  
 
 static PyObject *Map_GetMap(MapObject *self, void *closure) {
     if (self->m != NULL) {
-        return list_to_PyList(self->m, self->nrow, self->ncol);
+        return list_to_PyTuple(self->m, self->nrow, self->ncol);
     } else {
         return Py_None;
     }
@@ -208,6 +208,7 @@ static PyTypeObject MapType = {
 };
 
 static void MapIter_Dealloc(MapIterObject *self) {
+	assert(!self->buf);
 	free(self->buf);
     Py_XDECREF(self->mobj);
 	Py_TYPE(self)->tp_free((PyObject*)self);
@@ -249,6 +250,10 @@ static PyMemberDef MapIter_Members[] = {
 // tp_iter should return another object that passes PyIter_Check.
 // No new reference created.
 PyObject *MapIter_Iter(PyObject *self) {
+	if (!MAP(self)->m) {
+		PyErr_SetString(PyExc_AssertionError, "Map object has not been initialized.");
+		return NULL;
+	}
     ITER(self)->curr = 0;
     Py_INCREF(self);
 	return self;
@@ -263,7 +268,7 @@ PyObject *MapIter_IterNext(PyObject *self) {
     MapObject *q = MAP(p);
     if (p->curr++ < p->goal) {
         update_map(p->buf, q->nrow, q->ncol);
-        return list_to_PyList(p->buf, q->nrow, q->ncol);
+        return list_to_PyTuple(p->buf, q->nrow, q->ncol);
     } else {
         /* return NULL is required */
         PyErr_SetNone(PyExc_StopIteration);
