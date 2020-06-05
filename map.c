@@ -4,14 +4,23 @@
 #include <structmember.h>
 #include "life_helpers.h"
 
+#define MAP(obj) ((MapObject *)(obj))
+#define ITER(obj) ((MapIterObject *)(obj))
+
+PyObject *MapIter_IterNext(PyObject *self);
+PyObject *MapIter_Iter(PyObject *self);
+static PyObject *MapIter_New(PyTypeObject *type, PyObject *args, PyObject *kwds);
+static PyTypeObject MapIterType;
+
+/*
+ * Helper function.
+ */
 static PyObject *list_to_PyList(int *map, int nrow, int ncol) {
-	PyObject *res = PyList_New((Py_ssize_t)nrow * ncol);
-	Py_INCREF(res);
+	PyObject *res = PyList_New((Py_ssize_t) nrow * ncol);
 	PyObject *row = NULL;
 	for (int idx = 0; idx < nrow * ncol; idx++) {
 		if (idx % ncol == 0) {
-			row = PyList_New((Py_ssize_t)ncol);
-			Py_INCREF(row);
+			row = PyList_New((Py_ssize_t) ncol);
 			PyList_Append(res, row);
 		}
 		PyList_Append(row, PyLong_FromLong(map[idx]));
@@ -19,15 +28,15 @@ static PyObject *list_to_PyList(int *map, int nrow, int ncol) {
 	return res;
 }
 
-/*
+/*     
  * Documentation for map.
  */
-PyDoc_STRVAR(map_mod_doc, "This module implements the map of 2D version \
+PyDoc_STRVAR(Map_ModDoc, "This module implements the map of 2D version \
     of the 'Game of Life' and a generator of the map, which returns the \
     current state and updates the state of the map when called.\
 	Import: from map import Map, MapIter");
 
-PyDoc_STRVAR(map_obj_doc, "Usage: map.Map(row: int, col: int)");
+PyDoc_STRVAR(Map_ObjDoc, "Usage: map.Map(row: int, col: int)");
 
 /*
  * Custom PyObject for Map.
@@ -39,14 +48,26 @@ typedef struct {
     int ncol;
 } MapObject;
 
+/* Map Iterator Class */
+typedef struct {
+	PyObject_HEAD
+		PyObject *mobj;
+	int *buf;
+	int curr;
+	int goal;
+} MapIterObject;
+
+static int MapIter_Init(MapIterObject *self, PyObject *args, PyObject *kwds);
+static void MapIter_Dealloc(MapIterObject *self);
+
 /* Since we have some data to manage, we at least need to have
    deallocation. */
-static void Map_dealloc(MapObject *self) {
+static void Map_Dealloc(MapObject *self) {
     free(self->m);
     Py_TYPE(self)->tp_free((PyObject*) self);
 }
 
-static PyObject *Map_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
+static PyObject *Map_New(PyTypeObject *type, PyObject *args, PyObject *kwds) {
     MapObject *self;
     /* allocate memory for self, and since we did not fill the tp_alloc slot,
        PyType_Ready() is used as default by object */
@@ -59,7 +80,7 @@ static PyObject *Map_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
     return (PyObject *) self;
 }
 
-static int Map_init(MapObject *self, PyObject *args, PyObject *kwds) {
+static int Map_Init(MapObject *self, PyObject *args, PyObject *kwds) {
     /* notice that in the previous function we have
        new-ed self hence we can use it here */
     /* parse args to three ints, third is optional
@@ -73,13 +94,13 @@ static int Map_init(MapObject *self, PyObject *args, PyObject *kwds) {
 /*
  * Define all map's members.
  */
-static PyMemberDef Map_members[] = {
+static PyMemberDef Map_Members[] = {
     {"nrow", T_INT, offsetof(MapObject, nrow), READONLY, "number of rows"},
     {"ncol", T_INT, offsetof(MapObject, ncol), READONLY, "number of columns"},
     {NULL}	/* Sentinal */
 };
 
-static PyObject *Map_set_map(MapObject *self, PyObject *m, void *closure) {
+static PyObject *Map_SetMap(MapObject *self, PyObject *m, void *closure) {
     /* prevent from being garbage collected during this process. */
 	Py_XINCREF(m);
     /* copy by value; DO NOT COPY BY REF use
@@ -130,7 +151,7 @@ error2:
 	return NULL;
 }  
 
-static PyObject *Map_get_map(MapObject *self, void *closure) {
+static PyObject *Map_GetMap(MapObject *self, void *closure) {
     if (self->m != NULL) {
         return list_to_PyList(self->m, self->nrow, self->ncol);
     } else {
@@ -138,19 +159,33 @@ static PyObject *Map_get_map(MapObject *self, void *closure) {
     }
 }
 
-/* TODO: Return a new iterator. */
-// static PyObject *Map_get_iter(MapObject *self, void *closure);
+static PyObject *Map_Iter(MapObject *self, PyObject *args) {
+    long int goal;
+    if (!PyArg_ParseTuple(args, "l", &goal))
+        return NULL;
+    MapIterObject *iter = PyObject_New(MapIterObject, &MapIterType);
+    if (!iter)
+        return NULL;
+    if (!PyObject_Init((PyObject *) iter, &MapIterType)) {
+        Py_DECREF(iter);
+        return NULL;
+    }
+    iter->goal = goal;
+    iter->mobj = (PyObject *)self;
+    Py_INCREF(self);
+    return (PyObject *)iter;
+}
 
 /*
  * Define all Map's methods.
  */
-static PyMethodDef Map_methods[] = {
-    {"set_map", (PyCFunction) Map_set_map, METH_VARARGS,
+static PyMethodDef Map_Methods[] = {
+    {"set_map", (PyCFunction) Map_SetMap, METH_VARARGS,
      "Set the content of the map."},
-    {"get_map", (PyCFunction) Map_get_map, METH_NOARGS,
+    {"get_map", (PyCFunction) Map_GetMap, METH_NOARGS,
      "Get a tuple version of the map."},
-	/*{"get_iter", (PyCFunction) Map_get_iter, METH_NOARGS,
-	 "Get a new iterator of the map object."},*/
+	{"get_iter", (PyCFunction) Map_Iter, METH_VARARGS,
+	 "Get a new iterator of the map object."},
     {NULL}
 };
 
@@ -160,34 +195,25 @@ static PyMethodDef Map_methods[] = {
 static PyTypeObject MapType = {
     PyVarObject_HEAD_INIT(NULL, 0)
     .tp_name = "map.Map",
-    .tp_doc  = map_obj_doc,
+    .tp_doc  = Map_ObjDoc,
     .tp_basicsize = sizeof(MapObject),
     .tp_itemsize  = 0,
     .tp_flags = Py_TPFLAGS_DEFAULT,                         /* not subtypable */
     .tp_alloc = PyType_GenericAlloc,
-    .tp_new = Map_new,
-    .tp_init = (initproc) Map_init,
-    .tp_dealloc = (destructor) Map_dealloc,                 /* destructor */
-    .tp_members = Map_members,
-    .tp_methods = Map_methods,
+    .tp_new = Map_New,
+    .tp_init = (initproc) Map_Init,
+    .tp_dealloc = (destructor) Map_Dealloc,                 /* destructor */
+    .tp_members = Map_Members,
+    .tp_methods = Map_Methods,
 };
 
-/* Map Iterator Class */
-typedef struct {
-	PyObject_HEAD
-	MapObject *mobj;
-	int *buf;
-	int curr;
-	int goal;
-} MapIterObject;
-
-static void MapIter_dealloc(MapIterObject *self) {
+static void MapIter_Dealloc(MapIterObject *self) {
 	free(self->buf);
     Py_XDECREF(self->mobj);
 	Py_TYPE(self)->tp_free((PyObject*)self);
 }
 
-static PyObject *MapIter_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
+static PyObject *MapIter_New(PyTypeObject *type, PyObject *args, PyObject *kwds) {
 	MapIterObject *self;
 	self = (MapIterObject *)type->tp_alloc(type, 0);
 	if (self != NULL) {
@@ -196,20 +222,20 @@ static PyObject *MapIter_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 		self->buf = NULL;
 		self->mobj = NULL;
 	}
-	return (PyObject *)self;
+	return (PyObject *) self;
 }
 
-static int MapIter_init(MapIterObject *self, PyObject *args, PyObject *kwds) {
+static int MapIter_Init(MapIterObject *self, PyObject *args, PyObject *kwds) {
 	if (!PyArg_ParseTuple(args, "Ol" /* only for ParseTuple*/,
 		&self->mobj, &self->goal))
 		return -1;
-    Py_ssize_t len = (Py_ssize_t) self->mobj->ncol * self->mobj->nrow;
+    Py_ssize_t len = (Py_ssize_t) MAP(self->mobj)->ncol * MAP(self->mobj)->nrow;
     self->buf = malloc(sizeof(int) * len);
-    for (int *p = self->mobj->m, *q = self->buf; p - self->mobj->m < len; *q++ = *p++);
+    for (int *p = MAP(self->mobj)->m, *q = self->buf; p - MAP(self->mobj)->m < len; *q++ = *p++);
 	return 0;
 }
 
-static PyMemberDef MapIter_members[] = {
+static PyMemberDef MapIter_Members[] = {
 	{"curr", T_INT, offsetof(MapIterObject, curr), READONLY, "current state"},
 	{"goal", T_INT, offsetof(MapIterObject, goal), READONLY, "goal state"},
 	{NULL}	/* Sentinal */
@@ -222,56 +248,55 @@ static PyMemberDef MapIter_members[] = {
 // fail to provide tp_iter cause "object is not iterable" exception.
 // tp_iter should return another object that passes PyIter_Check.
 // No new reference created.
-PyObject *MapIter_GetIter(MapIterObject *self) {
-    self->curr = 0;
-	return (PyObject *) self;
+PyObject *MapIter_Iter(PyObject *self) {
+    ITER(self)->curr = 0;
+    Py_INCREF(self);
+	return self;
 }
 
 // Set tp_iternext to this function
 // tp_iternext should take an iterator, which would be the iterable
 // returned by tp_iter. Return of this function creates new reference.
 // Return NULL with no exception set when finished
-PyObject *MapIter_GetNext(MapIterObject *self) {
-	if (self->curr < self->goal) {
-        update_map(self->buf, self->mobj->nrow, self->mobj->ncol);
-        return list_to_PyList(self->buf, self->mobj->nrow, self->mobj->ncol);
+PyObject *MapIter_IterNext(PyObject *self) {
+	MapIterObject *p = ITER(self);
+    MapObject *q = MAP(p);
+    if (p->curr++ < p->goal) {
+        update_map(p->buf, q->nrow, q->ncol);
+        return list_to_PyList(p->buf, q->nrow, q->ncol);
     } else {
+        /* return NULL is required */
+        PyErr_SetNone(PyExc_StopIteration);
         return NULL;
     }
 }
 
-static PyMethodDef MapIter_methods[] = {
-	{NULL}
-};
-
 static PyTypeObject MapIterType = {
 	PyVarObject_HEAD_INIT(NULL, 0)
-	.tp_name = "map.MapIter",
-	.tp_doc = map_obj_doc,
+	.tp_name = "map._MapIter",
+	.tp_doc = Map_ModDoc,
 	.tp_basicsize = sizeof(MapIterObject),
 	.tp_itemsize = 0,
-	#if PY_MAJOR_VERSION >=3
-	#  define Py_TPFLAGS_HAVE_ITER 0
-	#endif
+#if PY_MAJOR_VERSION >=3
+	#define Py_TPFLAGS_HAVE_ITER 0
+#endif
 	.tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_ITER,    /* Py_TPFLAGS_HAVE_ITER is set for iterator features */
 	.tp_alloc = PyType_GenericAlloc,
-	.tp_new = MapIter_new,
-	.tp_init = (initproc)MapIter_init,
-	.tp_dealloc = (destructor)MapIter_dealloc,                 /* destructor */
-	.tp_members = MapIter_members,
-	.tp_methods = MapIter_methods,
-    .tp_iter = (getiterfunc) MapIter_GetIter,
-    .tp_iternext = (iternextfunc) MapIter_GetNext,
+	.tp_new = MapIter_New,
+	.tp_init = (initproc)MapIter_Init,
+	.tp_dealloc = (destructor)MapIter_Dealloc,                 /* destructor */
+	.tp_members = MapIter_Members,
+	.tp_iter = (getiterfunc)MapIter_Iter,
+	.tp_iternext = (iternextfunc)MapIter_IterNext,
 };
-
 
 /*
  * Configurations for map module.
  */
-static PyModuleDef mapmodule = {
+static PyModuleDef MapModule = {
     PyModuleDef_HEAD_INIT,
     .m_name = "map",
-    .m_doc = map_mod_doc,
+    .m_doc = Map_ModDoc,
     .m_size = -1,
 };
 
@@ -286,7 +311,7 @@ PyMODINIT_FUNC PyInit_map(void) {
 	if (PyType_Ready(&MapIterType) < 0)
 		return NULL;
 
-    map = PyModule_Create(&mapmodule);
+    map = PyModule_Create(&MapModule);
     if (map == NULL)
         return NULL;
 
@@ -298,7 +323,7 @@ PyMODINIT_FUNC PyInit_map(void) {
         return NULL;
     }
 
-	if (PyModule_AddObject(map, "MapIter", (PyObject *)&MapIterType) < 0) {
+	if (PyModule_AddObject(map, "_MapIter", (PyObject *)&MapIterType) < 0) {
 		Py_DECREF(&MapIterType);
 		Py_DECREF(&MapType);
 		Py_DECREF(map);
