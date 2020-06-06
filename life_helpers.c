@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include "life_helpers.h"
 
 static int num_neighbor(int *map, int c,  int i) {
 	int count = 0;
@@ -38,5 +39,4 @@ void update_map(int *map, int nrow, int ncol) {
 		}
 	}
 	free(ol_m);
-	return 0;
 }

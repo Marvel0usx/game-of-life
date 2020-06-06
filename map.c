@@ -11,7 +11,7 @@ PyObject *MapIter_IterNext(PyObject *self);
 PyObject *MapIter_Iter(PyObject *self);
 static PyObject *MapIter_New(PyTypeObject *type, PyObject *args, PyObject *kwds);
 static PyTypeObject MapIterType;
-
+ 
 /*
  * Helper function.
  */
@@ -51,7 +51,7 @@ typedef struct {
 /* Map Iterator Class */
 typedef struct {
 	PyObject_HEAD
-		PyObject *mobj;
+	PyObject *mobj;
 	int *buf;
 	int curr;
 	int goal;
@@ -146,7 +146,7 @@ error:
 	return NULL;
 
 error2:
-	self->m = NULL;
+	free(self->m);
 	Py_XDECREF(args);
 	return NULL;
 }  
@@ -221,7 +221,7 @@ static PyObject *MapIter_New(PyTypeObject *type, PyObject *args, PyObject *kwds)
 		self->curr = 0;
 		self->goal = 0;
 		self->buf = NULL;
-		self->mobj = NULL;
+		self->mobj = Py_None;
 	}
 	return (PyObject *) self;
 }
@@ -265,7 +265,7 @@ PyObject *MapIter_Iter(PyObject *self) {
 // Return NULL with no exception set when finished
 PyObject *MapIter_IterNext(PyObject *self) {
 	MapIterObject *p = ITER(self);
-    MapObject *q = MAP(p);
+    MapObject *q = MAP(p->mobj);
     if (p->curr++ < p->goal) {
         update_map(p->buf, q->nrow, q->ncol);
         return list_to_PyTuple(p->buf, q->nrow, q->ncol);
