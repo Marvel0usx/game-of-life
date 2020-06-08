@@ -173,6 +173,9 @@ static PyObject *Map_Iter(MapObject *self, PyObject *args) {
     iter->goal = goal;
     iter->mobj = (PyObject *)self;
     Py_INCREF(self);
+    Py_ssize_t len = (Py_ssize_t) self->ncol * self->nrow;
+	iter->buf = malloc(sizeof(int) * len);
+    for (int *p = self->m, *q = iter->buf; p - self->m < len; *q++ = *p++);
     return (PyObject *)iter;
 }
 
@@ -230,9 +233,6 @@ static int MapIter_Init(MapIterObject *self, PyObject *args, PyObject *kwds) {
 	if (!PyArg_ParseTuple(args, "Ol" /* only for ParseTuple*/,
 		&self->mobj, &self->goal))
 		return -1;
-    Py_ssize_t len = (Py_ssize_t) MAP(self->mobj)->ncol * MAP(self->mobj)->nrow;
-    self->buf = malloc(sizeof(int) * len);
-    for (int *p = MAP(self->mobj)->m, *q = self->buf; p - MAP(self->mobj)->m < len; *q++ = *p++);
 	return 0;
 }
 
