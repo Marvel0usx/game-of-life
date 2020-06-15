@@ -1,3 +1,5 @@
+#pragma warning(disable:4996)
+#include <stdio.h>
 #include <stdlib.h>
 #include "life_helpers.h"
 
@@ -40,3 +42,29 @@ void update_map(int *map, int nrow, int ncol) {
 	}
 	free(ol_m);
 }
+
+char *compress(int map[], size_t len) { return NULL; }
+int *decompress(char *snippet, size_t len) { return NULL; }
+int save_as_csv(char *name, char *snippet, size_t len) {
+	FILE *fp = fopen(name, "w");
+	if (!fp) {
+		return 1;
+	}
+	int err = fprintf_s(fp, snippet);
+	fclose(fp);
+	if (err == len)
+		return 0;
+	else
+		return 1;
+}
+char *read_from_csv(char *name) {
+	FILE *fp = fopen(name, "r");
+	if (!fp)
+		perror("File does not exist.");
+	int len;
+	fscanf(fp, "%i", &len);
+	char *snippet = malloc(sizeof(char) * len);
+	fscanf(fp, "%s", snippet);
+	return snippet;
+}
+

@@ -160,6 +160,10 @@ static PyObject *Map_GetMap(MapObject *self, void *closure) {
 }
 
 static PyObject *Map_Iter(MapObject *self, PyObject *args) {
+    if (self->m == NULL) {
+        PyErr_SetString(PyExc_AssertionError, "Map has not been initialized.");
+        return NULL;
+    }
     long int goal;
     if (!PyArg_ParseTuple(args, "l", &goal))
         return NULL;
@@ -211,7 +215,7 @@ static PyTypeObject MapType = {
 };
 
 static void MapIter_Dealloc(MapIterObject *self) {
-	assert(!self->buf);
+	assert(self->buf);
 	free(self->buf);
     Py_XDECREF(self->mobj);
 	Py_TYPE(self)->tp_free((PyObject*)self);
