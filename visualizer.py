@@ -4,6 +4,7 @@ from tkinter import *
 from typing import Tuple
 import sys
 
+
 class GameOfLifeVisualizer():
     """ This class is the GUI interface for the 2D Game-of-live visualizer.
 
@@ -26,13 +27,13 @@ class GameOfLifeVisualizer():
         self._row = StringVar()
         self._map = None
         self._is_running = BooleanVar(value=False)
-
+        self.prev_x = None
+        self.prev_y = None
         self.__initialize_tk()
         self.__initialize_app()
 
     def __initialize_tk(self) -> None:
         # Initialize tk options
-        self._root.geometry("800x600")
         self._root.title("Game of Life - 2D Visualizer")
         self._root.resizable(height=False, width=False)
         self.__initialize_color_commons()
@@ -69,8 +70,12 @@ class GameOfLifeVisualizer():
 
     def __build_canvas(self) -> None:
         self._canvas = Canvas(master=self._root, width=800, height=560, 
-                              relief=GROOVE)
-        self._canvas.pack(side=BOTTOM, fill=X)
+                              relief=GROOVE, bg="gray95")
+        self._canvas.pack(side=TOP)
+        self._canvas.bind("<B1-Motion>", lambda event: self._paint(event, 1))
+        self._canvas.bind('<ButtonRelease-1>', self._reset_cvs)
+        self._canvas.bind("<B3-Motion>", lambda event: self._paint(event, 0))
+        self._canvas.bind("<MouseWheel>", self._zoom)
 
     def __build_control_area(self) -> None:
         self._b_set = Button(master=self._root, text="SET", state=ACTIVE,
@@ -81,12 +86,15 @@ class GameOfLifeVisualizer():
                                state=DISABLED, command=self._pause_process)
         self._b_stop = Button(master=self._root, text="STOP", state=DISABLED,
                               command=self._stop_process, width=28)
+        self.slider = Scale(self._root, from_=1, to=30, orient=HORIZONTAL)
+        self.slider.set(1)
+        self.slider.pack()
+
 
         self._b_set.pack(side=LEFT, fill=Y, pady=1, padx=1)
         self._b_start.pack(side=LEFT, fill=Y, pady=1, padx=1)
         self._b_pause.pack(side=LEFT, fill=Y, pady=1, padx=1)
         self._b_stop.pack(side=LEFT, fill=Y, pady=1, padx=1)
-    
 
     def dummy(self) -> None:
         pass
@@ -125,6 +133,21 @@ class GameOfLifeVisualizer():
         self._b_pause.config(state=DISABLED)
         self._is_running.set(value=False)
 
+    def _paint(self, new, flag): 
+        if self.prev_x and self.prev_y:
+            self._canvas.create_line(self.prev_x, self.prev_y, new.x, new.y, width=self.slider.get(), fill=("gray95", "black")[flag], capstyle=ROUND, smooth=True)
+        self.prev_x = new.x
+        self.prev_y = new.y
+
+    def _zoom(self, event):
+        factor = 1.001 ** event.delta
+        self._canvas.scale(ALL, event.x, event.y, factor, factor)
+        
+    def _reset_cvs(self, e):
+        self.prev_x = None
+        self.prev_y = None
+        
+ 
 if __name__ == "__main__":
     root = Tk()
     vis = GameOfLifeVisualizer(root)
