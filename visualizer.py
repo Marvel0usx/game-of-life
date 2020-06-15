@@ -3,7 +3,7 @@ from os import system
 from tkinter import *
 from typing import Tuple
 import sys
-
+import pickle
 
 class GameOfLifeVisualizer():
     """ This class is the GUI interface for the 2D Game-of-live visualizer.
@@ -31,6 +31,7 @@ class GameOfLifeVisualizer():
         self.prev_y = None
         self.__initialize_tk()
         self.__initialize_app()
+        self.cells = set()
 
     def __initialize_tk(self) -> None:
         # Initialize tk options
@@ -135,7 +136,13 @@ class GameOfLifeVisualizer():
 
     def _paint(self, new, flag): 
         if self.prev_x and self.prev_y:
-            self._canvas.create_line(self.prev_x, self.prev_y, new.x, new.y, width=self.slider.get(), fill=("gray95", "black")[flag], capstyle=ROUND, smooth=True)
+            if self.prev_x != new.x and self.prev_y == new.y:
+                self.cells.add((new.x, self.prev_y))
+            if self.prev_y != new.y and self.prev_x == new.x:
+                self.cells.add((self.prev_x, new.y))
+            if self.prev_x != new.x and self.prev_y != new.y:
+                self.cells.add((new.x, new.y))
+            self._canvas.create_line(self.prev_x, self.prev_y, new.x, new.y, width=self.slider.get(), tag="ddd", fill=("gray95", "black")[flag], capstyle=ROUND, smooth=True)
         self.prev_x = new.x
         self.prev_y = new.y
 
