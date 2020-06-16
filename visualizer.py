@@ -1,9 +1,6 @@
 from tkinter import *
-from tkinter.filedialog import asksaveasfilename, askopenfilename
-from tkinter.messagebox import showerror
-from typing import Tuple
+from typing import Optional, Callable, Tuple, Set
 from os import system
-import pickle
 
 
 class GameOfLifeVisualizer():
@@ -11,28 +8,13 @@ class GameOfLifeVisualizer():
 
     === Private Attributes ===
     _root : the root of tk
-    _col  : number of columns on the map
-    _row  : number of rows on the map
-    _map  : the map
-    _is_running : state of the game
     """
     _root: Tk
-    _col: int
-    _row: int
-    _map: Tuple[Tuple[int]]
-    _is_running: BooleanVar
 
     def __init__(self, root=None) -> None:
         self._root = root
-        self._col = StringVar()
-        self._row = StringVar()
-        self._map = None
-        self.prev_x = None
-        self.prev_y = None
         self.__initialize_tk()
         self.__initialize_app()
-        self.cells = set()
-        self.is_running = False
 
     def __initialize_tk(self) -> None:
         # Initialize tk options
@@ -51,7 +33,9 @@ class GameOfLifeVisualizer():
     def __initialize_app(self) -> None:
         self.__build_main_window()
 
-    def build_menubar(self, ca, lf, sa) -> None:
+    def build_menubar(self, ca: Callable, lf: Callable, sa: Callable) -> None:
+        """Function to inject, and bind the functions: clear_all, load_file, and save_all.
+        """
         menubar = Menu(master=self._root)
         file_menu = Menu(master=menubar, tearoff=0)
         edit_menu = Menu(master=menubar, tearoff=0)
@@ -95,112 +79,19 @@ class GameOfLifeVisualizer():
 
 
 class CvsView(Canvas):
-    def __init__(self, **kwargs):
+    """Class extending the Canvas widget supports some extra attributes
+
+    === Attributes ===
+    prev_x : x-coordinate
+    prev_y : y-coordinate
+    cells : set of all points on the canvas
+    """
+    prev_x : Optional[int]
+    prev_y : Optional[int]
+    cells : Set[Tuple[int, int]]
+
+    def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         self.prev_x = None
         self.prev_y = None
         self.cells = set()
-
-
-class Controller:
-    def __init__(self, root):
-        self._root = root
-        self.is_running = False
-        self._view = GameOfLifeVisualizer(root)
-        self._canvas = CvsView(master=self._view.cvs_fr, width=800, height=560,
-                               relief=GROOVE, bg="gray95")
-        self._canvas.pack(fill=BOTH, expand=TRUE)
-        self._bind_all()
-
-    def _bind_all(self):
-        self._view.build_menubar(
-            lambda: self._canvas.delete(ALL),
-            self._load_file,
-            self._save_as)
-        self._view.btn_start.config(command=self._start_process)
-        self._view.btn_pause.config(command=self._pause_process)
-        self._view.btn_stop.config(comman=self._stop_process)
-        self._canvas.bind("<B1-Motion>", lambda event: self._paint(event, 1))
-        self._canvas.bind('<ButtonRelease-1>', self._reset_cvs)
-        self._canvas.bind("<B3-Motion>", lambda event: self._paint(event, 0))
-        self._canvas.bind("<MouseWheel>", self._zoom)
-        self._root.bind("<Control-s>", lambda e: self._save_as())
-        self._root.bind("<Control-o>", lambda e: self._load_file())
-
-    def _paint(self, new, flag):
-        if self._canvas.prev_x and self._canvas.prev_y:
-            if self._canvas.prev_x != new.x and self._canvas.prev_y == new.y:
-                self._canvas.cells.add((new.x, self._canvas.prev_y))
-            if self._canvas.prev_y != new.y and self._canvas.prev_x == new.x:
-                self._canvas.cells.add((self._canvas.prev_x, new.y))
-            if self._canvas.prev_x != new.x and self._canvas.prev_y != new.y:
-                self._canvas.cells.add((new.x, new.y))
-            self._canvas.create_line(self._canvas.prev_x, self._canvas.prev_y, new.x, new.y, width=self._view.slider.get(
-            ), fill=("gray95", "black")[flag], capstyle=ROUND, smooth=True)
-        self._canvas.prev_x = new.x
-        self._canvas.prev_y = new.y
-
-    def _zoom(self, event):
-        factor = 1.001 ** event.delta
-        self._canvas.scale(ALL, event.x, event.y, factor, factor)
-
-    def _reset_cvs(self, e):
-        self._canvas.prev_x = None
-        self._canvas.prev_y = None
-
-    def _start_process(self) -> None:
-        if self.is_running:
-            self._view.btn_pause.config(state=ACTIVE)
-        else:
-            self.is_running = True
-            self._view.btn_start.config(state=DISABLED)
-            self._view.btn_pause.config(state=ACTIVE)
-            self._view.btn_stop.config(state=ACTIVE)
-
-    def _pause_process(self) -> None:
-        if self.is_running:
-            self._view.btn_pause.config(state=DISABLED)
-            self._view.btn_start.config(state=ACTIVE)
-
-    def _stop_process(self) -> None:
-        if self.is_running:
-            self._view.btn_start.config(state=ACTIVE)
-            self._view.btn_stop.config(state=DISABLED)
-            self._view.btn_pause.config(state=DISABLED)
-            self.is_running = False
-
-    def _save_as(self):
-        extensions = [("Pickled Files", "*.dat"),
-                      ("CSV Files", "*.csv")]
-        path = asksaveasfilename(
-            initialdir=r"/", title="Filename", filetypes=extensions, defaultextension=".dat")
-        if not path:
-            return False
-        try:
-            with open(path, "wb") as handler:
-                pickle.dump(self._canvas.cells, handler)
-        except Exception as e:
-            showerror(f"Could not save {str(path)}.")
-
-    def _load_file(self):
-        extensions = [("Pickled Files", "*.dat"),
-                      ("CSV Files", "*.csv")]
-        path = askopenfilename()
-        if not path:
-            return False
-        try:
-            with open(path, "rb") as handler:
-                cells = pickle.load(handler)
-                # do not replace if error ocurrs
-                self._canvas.cells = cells
-            for pt in self._canvas.cells:
-                self._canvas.create_line(
-                    pt[0], pt[1], pt[0]+1, pt[1]+1, fill="black", width=self._view.slider.get())
-        except Exception as e:
-            showerror(f"Could not open {str(path)}.")
-
-
-if __name__ == "__main__":
-    root = Tk()
-    Controller(root)
-    root.mainloop()
