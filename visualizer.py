@@ -1,8 +1,8 @@
-from utils import *
-from os import system
 from tkinter import *
+from tkinter.filedialog import asksaveasfilename, askopenfilename
+from tkinter.messagebox import showerror
 from typing import Tuple
-import sys
+from os import system
 import pickle
 
 class GameOfLifeVisualizer():
@@ -26,12 +26,12 @@ class GameOfLifeVisualizer():
         self._col = StringVar()
         self._row = StringVar()
         self._map = None
-        self._is_running = BooleanVar(value=False)
         self.prev_x = None
         self.prev_y = None
         self.__initialize_tk()
         self.__initialize_app()
         self.cells = set()
+        self.is_running = False
 
     def __initialize_tk(self) -> None:
         # Initialize tk options
@@ -40,8 +40,6 @@ class GameOfLifeVisualizer():
         self.__initialize_color_commons()
 
     def __initialize_color_commons(self) -> None:
-        self._root.option_add('*background', 'gray')
-        self._root.option_add('*foreground', 'black')
         self._root.option_add('*EntryField.Entry.background', 'white')
         self._root.option_add('*MessageBar.Entry.background', 'gray85')
         self._root.option_add('*Listbox*background', 'white')
@@ -56,11 +54,17 @@ class GameOfLifeVisualizer():
     def __build_menubar(self) -> None:
         menubar = Menu(master=self._root)
         file_menu = Menu(master=menubar, tearoff=0)
+        self.edit_menu = Menu(master=menubar, tearoff=0)
+        self.edit_menu.add_command(label="Clear All", comman=lambda: self._canvas.delete(ALL))
         # TODO change dummy methods
-        file_menu.add_command(label="Load File", command=self.dummy)
-        file_menu.add_command(label="Save Process", command=self.dummy)
-        file_menu.add_command(label="Close Current", command=self.dummy)
+        file_menu.add_command(label="Load File", command=self._load_file, accelerator="(Ctrl+O)")
+        file_menu.add_command(label="Save As", command=self._save_as, accelerator="(Ctrl+S)")
+        file_menu.add_command(label="Close", command=self._close_map)
         menubar.add_cascade(label="File", menu=file_menu)
+        menubar.add_cascade(label="Edit", menu=self.edit_menu)
+        menubar.add_command(label="Exit", command=lambda: self._root.quit())
+        menubar.add_command(label="\u22EE",
+                    activebackground=menubar.cget("background"), state=DISABLED)
         menubar.add_command(label="About", command=lambda: system(
             "start www.github.com/Marvel0udx/game-of-life"))
         self._root.config(menu=menubar)
@@ -79,23 +83,19 @@ class GameOfLifeVisualizer():
         self._canvas.bind("<MouseWheel>", self._zoom)
 
     def __build_control_area(self) -> None:
-        self._b_set = Button(master=self._root, text="SET", state=ACTIVE,
-                             command=self._set_vars, width=28)
-        self._b_start = Button(master=self._root, text="START", width=28,
-                               state=DISABLED, command=self._start_process)
-        self._b_pause = Button(master=self._root, text="PAUSE", width=28,
+        self.btn_start = Button(master=self._root, text="START", width=28,
+                               state=ACTIVE, command=self._start_process)
+        self.btn_pause = Button(master=self._root, text="PAUSE", width=28,
                                state=DISABLED, command=self._pause_process)
-        self._b_stop = Button(master=self._root, text="STOP", state=DISABLED,
+        self.btn_stop = Button(master=self._root, text="STOP", state=DISABLED,
                               command=self._stop_process, width=28)
         self.slider = Scale(self._root, from_=1, to=30, orient=HORIZONTAL)
         self.slider.set(1)
-        self.slider.pack()
 
-
-        self._b_set.pack(side=LEFT, fill=Y, pady=1, padx=1)
-        self._b_start.pack(side=LEFT, fill=Y, pady=1, padx=1)
-        self._b_pause.pack(side=LEFT, fill=Y, pady=1, padx=1)
-        self._b_stop.pack(side=LEFT, fill=Y, pady=1, padx=1)
+        self.btn_start.pack(side=LEFT, fill=Y, pady=1, padx=1)
+        self.btn_pause.pack(side=LEFT, fill=Y, pady=1, padx=1)
+        self.btn_stop.pack(side=LEFT, fill=Y, pady=1, padx=1)
+        self.slider.pack(side=RIGHT, fill=BOTH, expand=True, padx=1)
 
     def dummy(self) -> None:
         pass
@@ -111,28 +111,28 @@ class GameOfLifeVisualizer():
         Entry(popup, textvariable=self._col, fg="gray95", width=15).grid(
                         column=2, row=2, padx=2, pady=10, sticky=W, columnspan=2)
         popup.transient(self._canvas)
-        self._b_start.config(state=ACTIVE)
+        self.btn_start.config(state=ACTIVE)
 
     def _start_process(self) -> None:
-        self._b_start.config(state=DISABLED)
-        if self._is_running.get():
-            self._b_pause.config(state=ACTIVE)
+        if self.is_running:
+            self.btn_pause.config(state=ACTIVE)
         else:
-            self._is_running.set(value=True)
-            self._b_set.config(state=DISABLED)
-            self._b_pause.config(state=ACTIVE)
-            self._b_stop.config(state=ACTIVE)
+            self.is_running = True
+            self.btn_start.config(state=DISABLED)
+            self.btn_pause.config(state=ACTIVE)
+            self.btn_stop.config(state=ACTIVE)
     
     def _pause_process(self) -> None:
-        self._b_pause.config(state=DISABLED)
-        self._b_start.config(state=ACTIVE)
+        if self.is_running:
+            self.btn_pause.config(state=DISABLED)
+            self.btn_start.config(state=ACTIVE)
     
     def _stop_process(self) -> None:
-        self._b_set.config(state=ACTIVE)
-        self._b_start.config(state=DISABLED)
-        self._b_stop.config(state=DISABLED)
-        self._b_pause.config(state=DISABLED)
-        self._is_running.set(value=False)
+        if self.is_running:
+            self.btn_start.config(state=ACTIVE)
+            self.btn_stop.config(state=DISABLED)
+            self.btn_pause.config(state=DISABLED)
+            self.is_running = False
 
     def _paint(self, new, flag): 
         if self.prev_x and self.prev_y:
@@ -153,8 +153,39 @@ class GameOfLifeVisualizer():
     def _reset_cvs(self, e):
         self.prev_x = None
         self.prev_y = None
-        
- 
+
+    def _save_as(self):
+        extensions = [("Pickled Files", "*.dat"),
+                      ("CSV Files", "*.csv")]
+        path = asksaveasfilename(initialdir=r"/", title="Filename", filetypes=extensions, defaultextension=".dat")
+        if not path:
+            return False
+        try:
+            with open(path, "wb") as handler:
+                pickle.dump(self.cells, handler)
+        except Exception as e:
+            showerror(f"Could not save {str(path)}.")
+
+    def _load_file(self):
+        extensions = [("Pickled Files", "*.dat"),
+                      ("CSV Files", "*.csv")]
+        path = askopenfilename()
+        if not path:
+            return False
+        try:
+            with open(path, "rb") as handler:
+                self.cells = pickle.load(handler)
+            for pt in self.cells:
+                self._canvas.create_line(pt[0], pt[1], pt[0]+1, pt[1]+1, fill="black", width=self.slider.get())
+        except Exception as e:
+            showerror(f"Could not open {str(path)}.")
+     
+    def _close_map(self):
+        self._stop_process()
+        self._reset_cvs(None)
+        self.cells = set()
+        self._canvas.delete(ALL)
+
 if __name__ == "__main__":
     root = Tk()
     vis = GameOfLifeVisualizer(root)
