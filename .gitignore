@@ -6,3 +6,5 @@ build
 CppProperties.json
 map
 structmember.h
+.idea
+.vscode

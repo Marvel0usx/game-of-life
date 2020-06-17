@@ -3,7 +3,7 @@ from tkinter import *
 from tkinter.filedialog import asksaveasfilename, askopenfilename
 from tkinter.messagebox import showerror
 import pickle
-
+from threading import Thread, Event, RLock
 
 class Controller:
     """Bridge between View and the Map Model. Thread dispatcher.
@@ -20,7 +20,9 @@ class Controller:
 
     def __init__(self, root) -> None:
         self._root = root
-        self.is_running = False
+        self.is_running = Event()
+        self.lock = RLock()
+        self.is_running.clear()
         self._view = GameOfLifeVisualizer(root)
         self._canvas = CvsView(master=self._view.cvs_fr, width=800, height=560,
                                relief=GROOVE, bg="gray95")
@@ -43,46 +45,50 @@ class Controller:
         self._root.bind("<Control-o>", lambda e: self._load_file())
 
     def _paint(self, new, flag) -> None:
-        if self._canvas.prev_x and self._canvas.prev_y:
-            if self._canvas.prev_x != new.x and self._canvas.prev_y == new.y:
-                self._canvas.cells.add((new.x, self._canvas.prev_y))
-            if self._canvas.prev_y != new.y and self._canvas.prev_x == new.x:
-                self._canvas.cells.add((self._canvas.prev_x, new.y))
-            if self._canvas.prev_x != new.x and self._canvas.prev_y != new.y:
-                self._canvas.cells.add((new.x, new.y))
-            self._canvas.create_line(self._canvas.prev_x, self._canvas.prev_y, new.x, new.y, width=self._view.slider.get(
-            ), fill=("gray95", "black")[flag], capstyle=ROUND, smooth=True)
-        self._canvas.prev_x = new.x
-        self._canvas.prev_y = new.y
+        with self.lock:
+            if self._canvas.prev_x and self._canvas.prev_y:
+                if self._canvas.prev_x != new.x and self._canvas.prev_y == new.y:
+                    self._canvas.cells.add((new.x, self._canvas.prev_y))
+                if self._canvas.prev_y != new.y and self._canvas.prev_x == new.x:
+                    self._canvas.cells.add((self._canvas.prev_x, new.y))
+                if self._canvas.prev_x != new.x and self._canvas.prev_y != new.y:
+                    self._canvas.cells.add((new.x, new.y))
+                self._canvas.create_line(self._canvas.prev_x, self._canvas.prev_y, new.x, new.y, width=self._view.slider.get(
+                ), fill=("gray95", "black")[flag], capstyle=ROUND, smooth=True)
+            self._canvas.prev_x = new.x
+            self._canvas.prev_y = new.y
 
     def _zoom(self, event) -> None:
         factor = 1.001 ** event.delta
-        self._canvas.scale(ALL, event.x, event.y, factor, factor)
+        with self.lock:
+            self._canvas.scale(ALL, event.x, event.y, factor, factor)
 
     def _reset_cvs(self, e) -> None:
-        self._canvas.prev_x = None
-        self._canvas.prev_y = None
+        with self.lock:
+            self._canvas.prev_x = None
+            self._canvas.prev_y = None
 
     def _start_process(self) -> None:
-        if self.is_running:
+        if self.is_running.is_set():
             self._view.btn_pause.config(state=ACTIVE)
         else:
-            self.is_running = True
+            self._
+            self.is_running.set()
             self._view.btn_start.config(state=DISABLED)
             self._view.btn_pause.config(state=ACTIVE)
             self._view.btn_stop.config(state=ACTIVE)
 
     def _pause_process(self) -> None:
-        if self.is_running:
+        if self.is_running.is_set():
             self._view.btn_pause.config(state=DISABLED)
             self._view.btn_start.config(state=ACTIVE)
 
     def _stop_process(self) -> None:
-        if self.is_running:
+        if self.is_running.is_set():
             self._view.btn_start.config(state=ACTIVE)
             self._view.btn_stop.config(state=DISABLED)
             self._view.btn_pause.config(state=DISABLED)
-            self.is_running = False
+            self.is_running.clear()
 
     def _save_as(self) -> None:
         extensions = [("Pickled Files", "*.dat"),
@@ -107,10 +113,11 @@ class Controller:
             with open(path, "rb") as handler:
                 cells = pickle.load(handler)
                 # do not replace if error ocurrs
-                self._canvas.cells = cells
-            for pt in self._canvas.cells:
-                self._canvas.create_line(
-                    pt[0], pt[1], pt[0]+1, pt[1]+1, fill="black", width=self._view.slider.get())
+                with self.lock:
+                    self._canvas.cells = cells
+                    for pt in self._canvas.cells:
+                        self._canvas.create_line(
+                            pt[0], pt[1], pt[0]+1, pt[1]+1, fill="black", width=self._view.slider.get())
         except Exception as e:
             showerror(f"Could not open {str(path)}.")
 
