@@ -45,9 +45,10 @@ class GameOfLifeVisualizer():
             label="Load File", command=lf, accelerator="(Ctrl+O)")
         file_menu.add_command(label="Save As", command=sa,
                               accelerator="(Ctrl+S)")
+        file_menu.add_separator()
         menubar.add_cascade(label="File", menu=file_menu)
         menubar.add_cascade(label="Edit", menu=edit_menu)
-        menubar.add_command(label="Exit", command=lambda: self._root.quit())
+        file_menu.add_command(label="Exit", command=lambda: self._root.quit())
         menubar.add_command(label="\u22EE",
                             activebackground=menubar.cget("background"), state=DISABLED)
         menubar.add_command(label="About", command=lambda: system(
@@ -71,7 +72,6 @@ class GameOfLifeVisualizer():
             master=self._root, text="STOP", state=DISABLED, width=28)
         self.slider = Scale(self._root, from_=1, to=30, orient=HORIZONTAL)
         self.slider.set(1)
-
         self.btn_start.pack(side=LEFT, fill=Y, pady=1, padx=1)
         self.btn_pause.pack(side=LEFT, fill=Y, pady=1, padx=1)
         self.btn_stop.pack(side=LEFT, fill=Y, pady=1, padx=1)

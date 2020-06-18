@@ -28,6 +28,22 @@ static PyObject *list_to_PyTuple(int *map, int nrow, int ncol) {
 	return res;
 }
 
+/* 
+ * Function converts list of pixels to a set of coordinates.
+ */
+static PyObject *map_as_PySet(int *map, int nrow, int ncol) {
+    PyObject *res = PySet_New(NULL);
+    for (int idx = 0; idx < nrow * ncol; idx++) {
+        if (map[idx] == 1) {
+            PyObject *cell = PyTuple_New(2);
+            PyTuple_SetItem(cell, 0, PyLong_FromLong(idx / ncol));
+			PyTuple_SetItem(cell, 1, PyLong_FromLong(idx % ncol));
+            PySet_Add(res, cell);
+        }
+    }
+    return res;
+}
+
 /*     
  * Documentation for map.
  */
@@ -270,9 +286,13 @@ PyObject *MapIter_Iter(PyObject *self) {
 PyObject *MapIter_IterNext(PyObject *self) {
 	MapIterObject *p = ITER(self);
     MapObject *q = MAP(p->mobj);
-    if (p->curr++ < p->goal) {
+    if (p->goal == -1) {
         update_map(p->buf, q->nrow, q->ncol);
-        return list_to_PyTuple(p->buf, q->nrow, q->ncol);
+        return map_as_PySet(p->buf, q->nrow, q->ncol); 
+    }
+    else if (p->curr++ < p->goal) {
+        update_map(p->buf, q->nrow, q->ncol);
+        return map_as_PySet(p->buf, q->nrow, q->ncol);
     } else {
         /* return NULL is required */
         PyErr_SetNone(PyExc_StopIteration);

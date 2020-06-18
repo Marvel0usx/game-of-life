@@ -4,6 +4,8 @@ from tkinter.filedialog import asksaveasfilename, askopenfilename
 from tkinter.messagebox import showerror
 import pickle
 from threading import Thread, Event, RLock
+from map import Map
+
 
 class Controller:
     """Bridge between View and the Map Model. Thread dispatcher.
@@ -21,8 +23,13 @@ class Controller:
     def __init__(self, root) -> None:
         self._root = root
         self.is_running = Event()
-        self.lock = RLock()
+        self.is_terminated = Event()
         self.is_running.clear()
+        self.is_terminated.clear()
+        self._cvs_lock = RLock()
+        self._mao = None
+        self._map_iter = None
+        self._update_t = None
         self._view = GameOfLifeVisualizer(root)
         self._canvas = CvsView(master=self._view.cvs_fr, width=800, height=560,
                                relief=GROOVE, bg="gray95")
@@ -45,7 +52,7 @@ class Controller:
         self._root.bind("<Control-o>", lambda e: self._load_file())
 
     def _paint(self, new, flag) -> None:
-        with self.lock:
+        with self._cvs_lock:
             if self._canvas.prev_x and self._canvas.prev_y:
                 if self._canvas.prev_x != new.x and self._canvas.prev_y == new.y:
                     self._canvas.cells.add((new.x, self._canvas.prev_y))
@@ -60,11 +67,11 @@ class Controller:
 
     def _zoom(self, event) -> None:
         factor = 1.001 ** event.delta
-        with self.lock:
+        with self._cvs_lock:
             self._canvas.scale(ALL, event.x, event.y, factor, factor)
 
     def _reset_cvs(self, e) -> None:
-        with self.lock:
+        with self._cvs_lock:
             self._canvas.prev_x = None
             self._canvas.prev_y = None
 
@@ -72,23 +79,63 @@ class Controller:
         if self.is_running.is_set():
             self._view.btn_pause.config(state=ACTIVE)
         else:
-            self._
             self.is_running.set()
             self._view.btn_start.config(state=DISABLED)
             self._view.btn_pause.config(state=ACTIVE)
             self._view.btn_stop.config(state=ACTIVE)
 
+            self._set_all()
+            self._update_t = Thread(target=self._update_canvas, daemon=True)
+            self._update_t.start()
+
+    def _update_canvas(self):
+        for new_map in self._map_iter:
+            if self.is_terminated.is_set():
+                return
+            self.is_running.wait()
+            with self._cvs_lock:
+                self._canvas.delete(ALL)
+                self._cvs_draw_cells(new_map)
+
+    def _cvs_draw_cells(self, cells):
+        self._canvas.cells = cells
+        for pt in self._canvas.cells:
+            self._canvas.create_line(
+                pt[0], pt[1], pt[0]+1, pt[1]+1, fill="black", width=self._view.slider.get())
+
+    def _unset_all(self):
+        self._mao = None
+        self._map_iter = None
+
+    def _set_all(self):
+        row, col = max(self._canvas.cells, key=lambda pt: pt[0]), \
+               max(self._canvas.cells, key=lambda pt: pt[1])
+        init_list = self._cvs2map(row, col)
+        self._mao = Map(row, col)
+        self._mao.set_map(init_list)
+        self._map_iter = self._mao.get_iter(-1)
+
+    def _cvs2map(self, row, col):
+        map = [0 for _ in range(row * col)]
+        for pt in self._canvas.cells:
+            map[pt[0] * col + pt[1]] = 1
+        return map
+
     def _pause_process(self) -> None:
         if self.is_running.is_set():
+            self.is_running.clear()
             self._view.btn_pause.config(state=DISABLED)
             self._view.btn_start.config(state=ACTIVE)
 
     def _stop_process(self) -> None:
         if self.is_running.is_set():
+            self.is_running.clear()
+            self.is_terminated.set()
+            self._unset_all()
+
             self._view.btn_start.config(state=ACTIVE)
             self._view.btn_stop.config(state=DISABLED)
             self._view.btn_pause.config(state=DISABLED)
-            self.is_running.clear()
 
     def _save_as(self) -> None:
         extensions = [("Pickled Files", "*.dat"),
@@ -113,11 +160,9 @@ class Controller:
             with open(path, "rb") as handler:
                 cells = pickle.load(handler)
                 # do not replace if error ocurrs
-                with self.lock:
-                    self._canvas.cells = cells
-                    for pt in self._canvas.cells:
-                        self._canvas.create_line(
-                            pt[0], pt[1], pt[0]+1, pt[1]+1, fill="black", width=self._view.slider.get())
+                with self._cvs_lock:
+                    self._canvas.delete(ALL)
+                    self._cvs_draw_cells(cells)
         except Exception as e:
             showerror(f"Could not open {str(path)}.")
 
