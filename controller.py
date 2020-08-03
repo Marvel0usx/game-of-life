@@ -6,6 +6,8 @@ import pickle
 from threading import Thread, Event, RLock
 from map import Map
 
+PADX = 0
+PADY = 0
 
 class Controller:
     """Bridge between View and the Map Model. Thread dispatcher.
@@ -15,9 +17,12 @@ class Controller:
     _view : window view
     _canvas : canvas view
     _mao : map access object
+    _row_start : index of the starting row
+    _col_start : index of the starting col
 
     === Attributes ===
     is_running : running state of visualizer
+    is_terminated : if the process is terminated or not
     """
 
     def __init__(self, root) -> None:
@@ -76,6 +81,8 @@ class Controller:
             self._canvas.prev_y = None
 
     def _start_process(self) -> None:
+        if not self._canvas.cells:
+            return
         if self.is_running.is_set():
             self._view.btn_pause.config(state=ACTIVE)
         else:
@@ -95,30 +102,44 @@ class Controller:
             self.is_running.wait()
             with self._cvs_lock:
                 self._canvas.delete(ALL)
-                self._cvs_draw_cells(new_map)
+                self._cvs_draw_cells(new_map, True)
 
-    def _cvs_draw_cells(self, cells):
+    def _cvs_draw_cells(self, cells, paddings):
         self._canvas.cells = cells
         for pt in self._canvas.cells:
-            self._canvas.create_line(
-                pt[0], pt[1], pt[0]+1, pt[1]+1, fill="black", width=self._view.slider.get())
+            if paddings:
+                self._canvas.create_line(
+                    pt[0] + PADX, pt[1] + PADY, pt[0]+1+PADX, pt[1]+1+PADY, fill="black",
+                        width=self._view.slider.get())
+            else:
+                self._canvas.create_line(
+                    pt[0], pt[1], pt[0]+1, pt[1]+1, fill="black", width=self._view.slider.get())
 
     def _unset_all(self):
         self._mao = None
         self._map_iter = None
+        self._row_start = None
+        self._col_start = None
 
     def _set_all(self):
-        row, col = max(self._canvas.cells, key=lambda pt: pt[0]), \
-               max(self._canvas.cells, key=lambda pt: pt[1])
-        init_list = self._cvs2map(row, col)
-        self._mao = Map(row, col)
-        self._mao.set_map(init_list)
+        row_max, col_max = max(self._canvas.cells, key=lambda pt: pt[0])[0], \
+                max(self._canvas.cells, key=lambda pt: pt[1])[1]
+        row_min, col_min = min(self._canvas.cells, key=lambda pt: pt[0])[0], \
+                min(self._canvas.cells, key=lambda pt: pt[1])[1]
+        self._row_start = row_min - PADX
+        self._col_start = col_min - PADY
+        # set canvas dimensions with paddings
+        height = 2 * PADY + row_max - row_min + 1
+        width = 2 * PADX + col_max - col_min + 1
+        self._mao = Map(width, height)
+        self._mao.set_map(self._cvs2map(width, height))
         self._map_iter = self._mao.get_iter(-1)
 
-    def _cvs2map(self, row, col):
-        map = [0 for _ in range(row * col)]
+    def _cvs2map(self, width, height):
+        map = [0 for _ in range(width * height)]
         for pt in self._canvas.cells:
-            map[pt[0] * col + pt[1]] = 1
+            idx = (pt[0] - self._row_start) * width + (pt[1] - self._col_start)
+            map[idx] = 1
         return map
 
     def _pause_process(self) -> None:
@@ -162,7 +183,7 @@ class Controller:
                 # do not replace if error ocurrs
                 with self._cvs_lock:
                     self._canvas.delete(ALL)
-                    self._cvs_draw_cells(cells)
+                    self._cvs_draw_cells(cells, False)
         except Exception as e:
             showerror(f"Could not open {str(path)}.")
 

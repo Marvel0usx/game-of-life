@@ -95,3 +95,7 @@ class CvsView(Canvas):
         self.prev_x = None
         self.prev_y = None
         self.cells = set()
+
+    def delete(self, *args):
+        self.cells.clear()
+        return super().delete(*args)
