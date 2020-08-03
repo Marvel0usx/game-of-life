@@ -70,7 +70,7 @@ class GameOfLifeVisualizer():
                                 state=DISABLED)
         self.btn_stop = Button(
             master=self._root, text="STOP", state=DISABLED, width=28)
-        self.slider = Scale(self._root, from_=0, to=10, orient=HORIZONTAL)
+        self.slider = Scale(self._root, from_=1, to=10, orient=HORIZONTAL)
         self.slider.set(1)
         self.btn_start.pack(side=LEFT, fill=Y, pady=1, padx=1)
         self.btn_pause.pack(side=LEFT, fill=Y, pady=1, padx=1)

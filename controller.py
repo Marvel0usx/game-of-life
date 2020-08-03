@@ -36,12 +36,14 @@ class Controller:
         self._mao = None
         self._map_iter = None
         self._update_t = None
-        self.factor = 1
+        self.last_zoom_factor = 1
         self._view = GameOfLifeVisualizer(root)
         self._canvas = CvsView(master=self._view.cvs_fr, width=800, height=560,
                                relief=GROOVE, bg="gray95")
         self._canvas.pack(fill=BOTH, expand=TRUE)
         self._bind_all()
+        self._update_t = Thread(target=self._update_canvas, daemon=True)
+        self._update_t.start()
 
     def _bind_all(self) -> None:
         self._view.build_menubar(
@@ -69,24 +71,32 @@ class Controller:
         self._view.btn_stop.config(state=DISABLED)
 
     def _paint(self, new, flag) -> None:
-        with self._cvs_lock:
-            if self._canvas.prev_x and self._canvas.prev_y:
-                if self._canvas.prev_x != new.x and self._canvas.prev_y == new.y:
-                    self._canvas.cells.add((new.x, self._canvas.prev_y))
-                if self._canvas.prev_y != new.y and self._canvas.prev_x == new.x:
-                    self._canvas.cells.add((self._canvas.prev_x, new.y))
-                if self._canvas.prev_x != new.x and self._canvas.prev_y != new.y:
-                    self._canvas.cells.add((new.x, new.y))
-                self._canvas.create_rectangle(self._canvas.prev_x, self._canvas.prev_y, new.x, new.y, width=1, fill=("gray95", "black")[flag])
-            self._canvas.prev_x = new.x
-            self._canvas.prev_y = new.y
+        if self.is_running.is_set():
+            return
+        if self._canvas.prev_x and self._canvas.prev_y:
+            if self._canvas.prev_x != new.x and self._canvas.prev_y == new.y:
+                self._canvas.cells.add((new.x, self._canvas.prev_y))
+            if self._canvas.prev_y != new.y and self._canvas.prev_x == new.x:
+                self._canvas.cells.add((self._canvas.prev_x, new.y))
+            if self._canvas.prev_x != new.x and self._canvas.prev_y != new.y:
+                self._canvas.cells.add((new.x, new.y))
+            self._canvas.create_line(self._canvas.prev_x, self._canvas.prev_y, new.x, new.y, width=2, fill=("gray95", "black")[flag])
+        self._canvas.prev_x = new.x
+        self._canvas.prev_y = new.y
 
     def _zoom(self, event) -> None:
-        self.factor = 1.001 ** event.delta
-        self.zoom_x = event.x
-        self.zoom_y = event.y
-        with self._cvs_lock:
-            self._canvas.scale(ALL, self.zoom_x, self.zoom_y, self.factor, self.factor)
+        if event.delta > 0:
+            if self.last_zoom_factor + 0.1 < 34:
+                self.last_zoom_factor += 0.1
+        else:
+            if self.last_zoom_factor >= 2:
+                self.last_zoom_factor -= 0.1
+            else:
+                self.last_zoom_factor /= 2
+        self.last_zoom_x = event.x
+        self.last_zoom_y = event.y
+        if not self.is_running.is_set():
+            self._canvas.scale(ALL, event.x, event.y, self.last_zoom_factor, self.last_zoom_factor)
 
     def _reset_cvs(self, e) -> None:
         with self._cvs_lock:
@@ -99,39 +109,40 @@ class Controller:
         if self.is_running.is_set():
             self._view.btn_pause.config(state=ACTIVE)
         else:
-            self.is_running.set()
             self._view.btn_start.config(state=DISABLED)
             self._view.btn_pause.config(state=ACTIVE)
             self._view.btn_stop.config(state=ACTIVE)
-
             self._set_all()
-            self._update_t = Thread(target=self._update_canvas, daemon=True)
-            self._update_t.start()
+            self.is_running.set()
 
     def _update_canvas(self):
+        self.is_running.wait()
         for new_map in self._map_iter:
-            sleep(self._view.slider.get()/2)
+            self.is_running.wait()
             if self.is_terminated.is_set():
                 return
-            self.is_running.wait()
             with self._cvs_lock:
                 self._canvas.delete(ALL)
                 self._cvs_draw_cells(new_map, True)
-                # if (self.factor != 1):
-                #     self._canvas.scale(ALL, self.zoom_x, self.zoom_y, self.factor, self.factor)
+                if (self.last_zoom_factor != 1):
+                    self._canvas.scale(ALL, self.last_zoom_x, self.last_zoom_y, 
+                        self.last_zoom_factor, self.last_zoom_factor)
+            sleep(1 / self._view.slider.get())
 
     def _cvs_draw_cells(self, cells, paddings):
         if not self.is_running.is_set():
             return
-        self._canvas.cells = cells
-        for pt in self._canvas.cells:
+        self._canvas.cells.clear()
+        for pt in cells:
             x = pt[0] + self._col_start
             y = pt[1] + self._row_start
             if paddings:
+                self._canvas.cells.add((x + PADX, y + PADY))
                 self._canvas.create_rectangle(
                     x + PADX, y + PADY, x+1+PADX, y+1+PADY, fill="black",
                         width=1)
             else:
+                self._canvas.cells.add((x, y))
                 self._canvas.create_rectangle(
                     x, y, x+1, y+1, fill="black", width=1)
 
@@ -166,9 +177,9 @@ class Controller:
 
     def _pause_process(self) -> None:
         if self.is_running.is_set():
-            self.is_running.clear()
             self._view.btn_pause.config(state=DISABLED)
             self._view.btn_start.config(state=ACTIVE)
+            self.is_running.clear()
 
     def _stop_process(self) -> None:
         if self.is_running.is_set():
