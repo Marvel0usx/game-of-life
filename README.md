@@ -31,7 +31,7 @@ Try to write Python module in C, and study the interpreter of Python (2.7.8).
 
 ### Screenshots
 
-![](https://haoyan.org/assets/images/gof (2).png)
+![]("https://haoyan.org/assets/images/gof (2).png")
 
-![](https://haoyan.org/assets/images/gof (1).png)
+![]("https://haoyan.org/assets/images/gof (1).png")
 
