@@ -36,10 +36,11 @@ class Controller:
         self._mao = None
         self._map_iter = None
         self._update_t = None
+        self._initialized = False
         self.last_zoom_factor = 1
         self._view = GameOfLifeVisualizer(root)
         self._canvas = CvsView(master=self._view.cvs_fr, width=800, height=560,
-                               relief=GROOVE, bg="gray95")
+                               relief=GROOVE, bg="black")
         self._canvas.pack(fill=BOTH, expand=TRUE)
         self._bind_all()
         self._update_t = Thread(target=self._update_canvas, daemon=True)
@@ -56,7 +57,7 @@ class Controller:
         self._canvas.bind("<B1-Motion>", lambda event: self._paint(event, 1))
         self._canvas.bind('<ButtonRelease-1>', self._reset_cvs)
         self._canvas.bind("<B3-Motion>", lambda event: self._paint(event, 0))
-        self._canvas.bind("<MouseWheel>", self._zoom)
+        self._root.bind("<MouseWheel>", self._zoom)
         self._root.bind("<Control-s>", lambda e: self._save_as())
         self._root.bind("<Control-o>", lambda e: self._load_file())
 
@@ -71,8 +72,6 @@ class Controller:
         self._view.btn_stop.config(state=DISABLED)
 
     def _paint(self, new, flag) -> None:
-        if self.is_running.is_set():
-            return
         if self._canvas.prev_x and self._canvas.prev_y:
             if self._canvas.prev_x != new.x and self._canvas.prev_y == new.y:
                 self._canvas.cells.add((new.x, self._canvas.prev_y))
@@ -80,7 +79,7 @@ class Controller:
                 self._canvas.cells.add((self._canvas.prev_x, new.y))
             if self._canvas.prev_x != new.x and self._canvas.prev_y != new.y:
                 self._canvas.cells.add((new.x, new.y))
-            self._canvas.create_line(self._canvas.prev_x, self._canvas.prev_y, new.x, new.y, width=2, fill=("gray95", "black")[flag])
+            self._canvas.create_line(self._canvas.prev_x, self._canvas.prev_y, new.x, new.y, width=2, fill=("black", "white")[flag])
         self._canvas.prev_x = new.x
         self._canvas.prev_y = new.y
 
@@ -89,29 +88,29 @@ class Controller:
             if self.last_zoom_factor + 0.1 < 34:
                 self.last_zoom_factor += 0.1
         else:
-            if self.last_zoom_factor >= 2:
+            if self.last_zoom_factor - 0.1 >= 0.1:
                 self.last_zoom_factor -= 0.1
-            else:
-                self.last_zoom_factor /= 2
         self.last_zoom_x = event.x
         self.last_zoom_y = event.y
         if not self.is_running.is_set():
             self._canvas.scale(ALL, event.x, event.y, self.last_zoom_factor, self.last_zoom_factor)
 
     def _reset_cvs(self, e) -> None:
-        with self._cvs_lock:
-            self._canvas.prev_x = None
-            self._canvas.prev_y = None
+        self._canvas.prev_x = None
+        self._canvas.prev_y = None
 
     def _start_process(self) -> None:
         if not self._canvas.cells:
             return
-        if self.is_running.is_set():
-            self._view.btn_pause.config(state=ACTIVE)
+        self._canvas.unbind("<B1-Motion>")
+        self._canvas.unbind("<B3-Motion>")
+        self._view.btn_pause.config(state=ACTIVE)
+        self._view.btn_stop.config(state=ACTIVE)
+        self._view.btn_start.config(state=DISABLED)
+        if self._initialized:
+            self.is_running.set()
         else:
-            self._view.btn_start.config(state=DISABLED)
-            self._view.btn_pause.config(state=ACTIVE)
-            self._view.btn_stop.config(state=ACTIVE)
+            self._initialized = True
             self._set_all()
             self.is_running.set()
 
@@ -121,16 +120,15 @@ class Controller:
             self.is_running.wait()
             if self.is_terminated.is_set():
                 return
-            with self._cvs_lock:
-                self._canvas.delete(ALL)
-                self._cvs_draw_cells(new_map, True)
-                if (self.last_zoom_factor != 1):
-                    self._canvas.scale(ALL, self.last_zoom_x, self.last_zoom_y, 
-                        self.last_zoom_factor, self.last_zoom_factor)
+            self._canvas.delete(ALL)
+            self._cvs_draw_cells(new_map, True)
+
             sleep(1 / self._view.slider.get())
 
     def _cvs_draw_cells(self, cells, paddings):
         if not self.is_running.is_set():
+            return
+        if self.is_terminated.is_set():
             return
         self._canvas.cells.clear()
         for pt in cells:
@@ -138,13 +136,18 @@ class Controller:
             y = pt[1] + self._row_start
             if paddings:
                 self._canvas.cells.add((x + PADX, y + PADY))
-                self._canvas.create_rectangle(
-                    x + PADX, y + PADY, x+1+PADX, y+1+PADY, fill="black",
-                        width=1)
+                with self._cvs_lock:
+                    this = self._canvas.create_rectangle(
+                        x + PADX, y + PADY, x+1+PADX, y+1+PADY, fill="white",
+                            width=1)
             else:
                 self._canvas.cells.add((x, y))
-                self._canvas.create_rectangle(
-                    x, y, x+1, y+1, fill="black", width=1)
+                with self._cvs_lock:
+                    this = self._canvas.create_rectangle(
+                        x, y, x+1, y+1, fill="white", width=1)
+            if (self.last_zoom_factor != 1):
+                self._canvas.scale(this, self.last_zoom_x, self.last_zoom_y, 
+                    self.last_zoom_factor, self.last_zoom_factor)
 
     def _unset_all(self):
         self._mao = None
