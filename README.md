@@ -1,6 +1,22 @@
 # game-of-life
 A visualization of 2D Conway's Game of Life based on CPython module and threaded GUI by tkinter.
 
+### Install and Run
+
+Create a virtual environment and install dependencies. **Microsoft Visual C++ 14.0 or greater is required.**
+
+```
+python -m venv game
+call ./game/Scripts/activate.bat
+pip install . --use-pep517
+```
+
+Run the following command to create the interface:
+
+```
+python controller.py
+```
+
 ### The Game
 
 The Game of Life is not a typical computer game. It is a 'cellular automaton', and was invented by Cambridge mathematician John Conway.
